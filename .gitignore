@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Raw Kaggle download: 640 MB of CSV plus a linux-only .so. Redownloadable from
+# the competition page, never edited, and nothing at runtime reads it — only
+# scripts/build_fixture.py does, once. See CLAUDE.md -> Data policy.
+data/raw/
+
+# Model artifacts
+models/
+*.txt.model
+*.pkl
+
+# Scratch
+.DS_Store
+scratch/
+runs/
