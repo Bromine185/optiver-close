@@ -1,0 +1,11 @@
+# Phase 1 needs no deep-learning stack. If a later phase adds one, port
+# seeding.torch_generator across from the sibling diff_model project rather than
+# reaching for torch.manual_seed at the call site.
+numpy>=2.0
+pandas>=2.2
+pyarrow>=17          # parquet
+scipy>=1.14
+scikit-learn>=1.5    # Ridge
+lightgbm>=4.0        # NOT used in Phase 1; reserved for Phase 2
+matplotlib>=3.9
+pytest>=8.0

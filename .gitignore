@@ -22,3 +22,9 @@ models/
 .DS_Store
 scratch/
 runs/
+
+# Built fixture: 130 MB, rebuilt from data/raw/ by scripts/build_fixture.py in
+# seconds (the run records its own `build_seconds` in the manifest), pinned by the
+# committed manifest.json (row counts + sha256). The 4 MB smoke fixture beside
+# it IS committed so the test suite runs on a fresh clone. See CLAUDE.md.
+data/fixtures/train.parquet

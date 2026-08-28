@@ -1,0 +1,392 @@
+{
+  "built_at_utc": "2026-08-28T14:22:22.640375+00:00",
+  "build_seconds": 9.6,
+  "source": {
+    "path": "data/raw/train.csv",
+    "bytes": 640897043,
+    "mtime_utc": "2023-11-14T18:41:46+00:00"
+  },
+  "versions": {
+    "pandas": "3.0.5",
+    "numpy": "2.5.2",
+    "python": "3.14.3"
+  },
+  "rows": 5237980,
+  "columns": [
+    "stock_id",
+    "date_id",
+    "seconds_in_bucket",
+    "imbalance_size",
+    "imbalance_buy_sell_flag",
+    "reference_price",
+    "matched_size",
+    "far_price",
+    "near_price",
+    "bid_price",
+    "bid_size",
+    "ask_price",
+    "ask_size",
+    "wap",
+    "target",
+    "time_id"
+  ],
+  "dropped_columns": {
+    "row_id": "exactly f'{date_id}_{seconds_in_bucket}_{stock_id}'; see data.row_id()"
+  },
+  "dtypes": {
+    "stock_id": "int16",
+    "date_id": "int16",
+    "seconds_in_bucket": "int16",
+    "imbalance_size": "float32",
+    "imbalance_buy_sell_flag": "int8",
+    "reference_price": "float32",
+    "matched_size": "float32",
+    "far_price": "float32",
+    "near_price": "float32",
+    "bid_price": "float32",
+    "bid_size": "float32",
+    "ask_price": "float32",
+    "ask_size": "float32",
+    "wap": "float32",
+    "target": "float32",
+    "time_id": "int32"
+  },
+  "geometry": {
+    "bucket_grid_ok": true,
+    "time_id_is_derived_from_date_and_second": true,
+    "rows_time_ordered": true,
+    "n_stocks": 200,
+    "n_dates": 481,
+    "date_id_min": 0,
+    "date_id_max": 480,
+    "date_ids_contiguous": true,
+    "stock_days_present": 95236,
+    "stock_days_possible": 96200,
+    "stock_days_missing": 964,
+    "stock_days_with_partial_auction": 0,
+    "partial_auction_sizes": {},
+    "rows_per_stock": {
+      "min": 10230,
+      "max": 26455,
+      "median": 26455,
+      "stocks_below_max": 11,
+      "ten_thinnest": {
+        "102": 10230,
+        "135": 15950,
+        "79": 16500,
+        "199": 21615,
+        "153": 22605,
+        "150": 23210,
+        "69": 24420,
+        "156": 24420,
+        "78": 26235,
+        "73": 26400
+      }
+    },
+    "rows_per_date": {
+      "min": 10505,
+      "max": 11000,
+      "median": 10945,
+      "dates_below_max": 296
+    }
+  },
+  "nulls": {
+    "stock_id": 0,
+    "date_id": 0,
+    "seconds_in_bucket": 0,
+    "imbalance_size": 220,
+    "imbalance_buy_sell_flag": 0,
+    "reference_price": 220,
+    "matched_size": 220,
+    "far_price": 2894342,
+    "near_price": 2857180,
+    "bid_price": 220,
+    "bid_size": 0,
+    "ask_price": 220,
+    "ask_size": 0,
+    "wap": 220,
+    "target": 88,
+    "time_id": 0
+  },
+  "null_structure": {
+    "cross_price_first_second": 300,
+    "before_first_second": {
+      "far_price": {
+        "min_null_rate": 1.0,
+        "max_null_rate": 1.0
+      },
+      "near_price": {
+        "min_null_rate": 1.0,
+        "max_null_rate": 1.0
+      }
+    },
+    "at_or_after_first_second": {
+      "far_price": {
+        "min_null_rate": 0.0002520055441219707,
+        "max_null_rate": 0.04499348985677685,
+        "null_rate_by_second": {
+          "300": 0.04499348985677685,
+          "310": 0.027332101306228738,
+          "320": 0.026376580284766266,
+          "330": 0.025841068503507078,
+          "340": 0.02502205048511067,
+          "350": 0.02470704355495821,
+          "360": 0.024486538703851486,
+          "370": 0.023888025536561806,
+          "380": 0.023499516989373765,
+          "390": 0.023153009366206057,
+          "400": 0.022669998739972278,
+          "410": 0.022344491578814733,
+          "420": 0.021861480952580958,
+          "430": 0.02052795161493553,
+          "440": 0.015991851820740057,
+          "450": 0.01108824394136671,
+          "460": 0.003633079927758411,
+          "470": 0.0019005418119198622,
+          "480": 0.0003045066991473812,
+          "490": 0.00028350623713721703,
+          "500": 0.00028350623713721703,
+          "510": 0.0002730060061321349,
+          "520": 0.0002730060061321349,
+          "530": 0.0002730060061321349,
+          "540": 0.0002520055441219707
+        }
+      },
+      "near_price": {
+        "min_null_rate": 4.200092402032845e-05,
+        "max_null_rate": 4.200092402032845e-05,
+        "null_rate_by_second": {
+          "300": 4.200092402032845e-05,
+          "310": 4.200092402032845e-05,
+          "320": 4.200092402032845e-05,
+          "330": 4.200092402032845e-05,
+          "340": 4.200092402032845e-05,
+          "350": 4.200092402032845e-05,
+          "360": 4.200092402032845e-05,
+          "370": 4.200092402032845e-05,
+          "380": 4.200092402032845e-05,
+          "390": 4.200092402032845e-05,
+          "400": 4.200092402032845e-05,
+          "410": 4.200092402032845e-05,
+          "420": 4.200092402032845e-05,
+          "430": 4.200092402032845e-05,
+          "440": 4.200092402032845e-05,
+          "450": 4.200092402032845e-05,
+          "460": 4.200092402032845e-05,
+          "470": 4.200092402032845e-05,
+          "480": 4.200092402032845e-05,
+          "490": 4.200092402032845e-05,
+          "500": 4.200092402032845e-05,
+          "510": 4.200092402032845e-05,
+          "520": 4.200092402032845e-05,
+          "530": 4.200092402032845e-05,
+          "540": 4.200092402032845e-05
+        }
+      }
+    },
+    "note": "Null before 300s is BY CONSTRUCTION: the exchange publishes no indicative crossing price until the five-minute mark. Residual nulls after 300s are genuine absences (no cross could be computed). Neither may be filled with 0 \u2014 these are prices normalised to ~1.0, and 0 is 10,000 bps away from every real value."
+  },
+  "target": {
+    "n_non_null": 5237892,
+    "n_null": 88,
+    "mean": -0.047561245607892835,
+    "std": 9.452858784405183,
+    "min": -385.2898,
+    "max": 446.07043,
+    "mean_abs_float64": 6.407770748115233,
+    "mean_abs_float32": 6.40777074786513,
+    "quantiles": {
+      "0.0001": -92.764002834,
+      "0.001": -49.380066,
+      "0.01": -25.650263,
+      "0.05": -14.050007,
+      "0.25": -4.5597553,
+      "0.5": -0.06020069,
+      "0.75": 4.4095516,
+      "0.95": 13.959408,
+      "0.99": 25.99001,
+      "0.999": 51.82028,
+      "0.9999": 100.36620482000883
+    },
+    "skew": 0.20466880279847222,
+    "excess_kurtosis": 22.557970029731294
+  },
+  "float32_round_trip": {
+    "ask_price": {
+      "max_abs_err": 5.960083004907801e-08,
+      "max_rel_err": 5.9562044358350624e-08
+    },
+    "ask_size": {
+      "max_abs_err": 1.0,
+      "max_rel_err": 5.722031933962044e-08
+    },
+    "bid_price": {
+      "max_abs_err": 5.960083004907801e-08,
+      "max_rel_err": 5.9562044358350624e-08
+    },
+    "bid_size": {
+      "max_abs_err": 1.0,
+      "max_rel_err": 5.935749195127248e-08
+    },
+    "far_price": {
+      "max_abs_err": 5.5175781312755134e-06,
+      "max_rel_err": 5.9562044358350624e-08
+    },
+    "imbalance_size": {
+      "max_abs_err": 124.05999994277954,
+      "max_rel_err": 5.960360384846165e-08
+    },
+    "matched_size": {
+      "max_abs_err": 255.25,
+      "max_rel_err": 5.960231783877704e-08
+    },
+    "near_price": {
+      "max_abs_err": 5.960083004907801e-08,
+      "max_rel_err": 5.9562044358350624e-08
+    },
+    "reference_price": {
+      "max_abs_err": 5.960083004907801e-08,
+      "max_rel_err": 5.9562044358350624e-08
+    },
+    "wap": {
+      "max_abs_err": 5.960083004907801e-08,
+      "max_rel_err": 5.9562044358350624e-08
+    }
+  },
+  "target_float32_gate": {
+    "max_abs_round_trip_err_bps": 1.4746093768280844e-05,
+    "zero_predictor_mae_shift_bps": 2.5010304938177796e-10,
+    "abs_tol_bps": 0.001,
+    "mae_shift_tol_bps": 1e-06,
+    "accepted": true
+  },
+  "fixtures": {
+    "full": {
+      "path": "data/fixtures/train.parquet",
+      "bytes": 129801676,
+      "sha256": "54fded6fe77bd17f567e34ed898ff580d9e733e752029e619ae132f8aacb0994",
+      "committed": false
+    },
+    "smoke": {
+      "path": "data/fixtures/train_smoke.parquet",
+      "root_seed": 20260828,
+      "fork_label": "smoke-stocks",
+      "n_stocks": 40,
+      "stock_ids": [
+        2,
+        5,
+        13,
+        16,
+        17,
+        20,
+        29,
+        31,
+        46,
+        53,
+        55,
+        56,
+        66,
+        67,
+        68,
+        72,
+        95,
+        96,
+        100,
+        101,
+        112,
+        115,
+        119,
+        125,
+        128,
+        132,
+        136,
+        139,
+        141,
+        143,
+        146,
+        150,
+        151,
+        152,
+        155,
+        166,
+        181,
+        186,
+        187,
+        190
+      ],
+      "date_blocks": 8,
+      "dates_per_block": 8,
+      "date_ids": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        67,
+        68,
+        69,
+        70,
+        71,
+        72,
+        73,
+        74,
+        135,
+        136,
+        137,
+        138,
+        139,
+        140,
+        141,
+        142,
+        202,
+        203,
+        204,
+        205,
+        206,
+        207,
+        208,
+        209,
+        270,
+        271,
+        272,
+        273,
+        274,
+        275,
+        276,
+        277,
+        337,
+        338,
+        339,
+        340,
+        341,
+        342,
+        343,
+        344,
+        405,
+        406,
+        407,
+        408,
+        409,
+        410,
+        411,
+        412,
+        473,
+        474,
+        475,
+        476,
+        477,
+        478,
+        479,
+        480
+      ],
+      "n_dates": 64,
+      "rows": 140360,
+      "bytes": 4134548,
+      "sha256": "f0f416c38403d935b126859842adcd55ac1adc0610812f1528e2cae3278026a7",
+      "committed": true
+    }
+  }
+}
