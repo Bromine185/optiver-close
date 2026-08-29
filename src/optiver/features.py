@@ -208,7 +208,9 @@ def clip_outliers(X: pd.DataFrame, bounds: dict[str, tuple[float, float]]) -> pd
     return out
 
 
-def quantile_bounds(X: pd.DataFrame, q: float = 0.001) -> dict[str, tuple[float, float]]:
+def quantile_bounds(
+    X: pd.DataFrame, q: float = 0.001, extra_skip: tuple[str, ...] = ()
+) -> dict[str, tuple[float, float]]:
     """Symmetric quantile bounds for every column that is not an indicator.
 
     The skip list is load-bearing, not tidiness. A quantile bound on a rare 0/1
@@ -219,8 +221,13 @@ def quantile_bounds(X: pd.DataFrame, q: float = 0.001) -> dict[str, tuple[float,
     rather than as a clip. That is exactly what happened before `INDICATOR_NAMES`
     existed, and `tests/test_features.py` now asserts the whole list rather than
     spot-checking one member of it.
+
+    `extra_skip` lets a caller extend the list for columns this module does not
+    own — Phase 2's indicators and rank features have the same two exemption
+    reasons and are declared next to their definitions in `features2.py`, not
+    here, so neither module has to know the other's names.
     """
-    skip = set(INDICATOR_NAMES) | set(BOUNDED_NAMES)
+    skip = set(INDICATOR_NAMES) | set(BOUNDED_NAMES) | set(extra_skip)
     return {
         col: (float(X[col].quantile(q)), float(X[col].quantile(1 - q)))
         for col in X.columns

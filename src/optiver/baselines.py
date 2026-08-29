@@ -157,14 +157,24 @@ class RidgeMicro:
     rescale: bool = True
     clip_in_fit: bool = True
     clip_in_predict: bool = True
+    #: None = features.FEATURE_NAMES exactly (the Phase 1 model, unchanged).
+    #: Phase 2 passes a wider list plus the matching `extra_skip` so the same
+    #: class can serve as the "linear model, memory features" arm of its 2x2.
+    columns: tuple[str, ...] | None = None
+    extra_skip: tuple[str, ...] = ()
     mu: np.ndarray = field(default=None, repr=False)
     sd: np.ndarray = field(default=None, repr=False)
     bounds: dict = field(default_factory=dict, repr=False)
     model: Ridge = field(default=None, repr=False)
     scale: float = 1.0
 
+    def _select(self, X: pd.DataFrame) -> pd.DataFrame:
+        return X[list(self.columns)] if self.columns is not None else X
+
     def fit(self, df: pd.DataFrame, X: pd.DataFrame, cfg: Config) -> "RidgeMicro":
-        self.bounds = F.quantile_bounds(X)
+        X = self._select(X)
+        self.fitted_columns = tuple(X.columns)
+        self.bounds = F.quantile_bounds(X, extra_skip=self.extra_skip)
         Xc = (F.clip_outliers(X, self.bounds) if self.clip_in_fit else X).to_numpy(np.float64)
         self.mu = Xc.mean(axis=0)
         # Zero-variance columns (an indicator that is constant within a fold)
@@ -189,13 +199,20 @@ class RidgeMicro:
         return self
 
     def predict(self, df: pd.DataFrame, X: pd.DataFrame) -> np.ndarray:
+        X = self._select(X)
         Xc = (F.clip_outliers(X, self.bounds) if self.clip_in_predict else X).to_numpy(np.float64)
         Z = (Xc - self.mu) / self.sd
         return self.scale * self.model.predict(Z)
 
     def coefficients(self) -> pd.Series:
-        """Coefficients on the STANDARDISED features, i.e. bps of target per 1 sd of feature."""
-        return pd.Series(self.scale * self.model.coef_, index=list(F.FEATURE_NAMES)).sort_values(
+        """Coefficients on the STANDARDISED features, i.e. bps of target per 1 sd of feature.
+
+        Indexed by the columns the model was actually FITTED on, recorded at fit
+        time — not by `FEATURE_NAMES` assumed. The two diverged once already:
+        with `columns=None` this model fits whatever frame the harness hands it,
+        and under Phase 2's wider builder that is 31 columns, not 14.
+        """
+        return pd.Series(self.scale * self.model.coef_, index=list(self.fitted_columns)).sort_values(
             key=np.abs, ascending=False
         )
 
@@ -220,15 +237,23 @@ def run_cv(
     cfg: Config,
     models: list | None = None,
     *,
+    feature_builder=None,
     verbose: bool = True,
 ) -> dict:
     """Fit every model on every fold and score on the fold's validation dates.
 
-    Features are built ONCE for the whole frame and then sliced. That is safe
-    only because `features.build` is strictly row-wise — no rolling windows, no
-    group statistics — so a row's features do not depend on which fold it lands
-    in. The moment Phase 2 adds a feature with memory, this must move inside the
-    fold loop, and the docstring there must say why.
+    Features are built ONCE for the whole frame and then sliced. Phase 1's
+    argument for that was strict row-wiseness; Phase 2's features have memory,
+    so the argument is now the weaker condition that actually matters:
+    every column `feature_builder` produces must be CAUSAL — a row's value
+    depends only on rows that precede it in auction/date order, never on which
+    fold it lands in. `tests/test_features2.py` asserts this by truncation for
+    every Phase 2 family. A non-causal builder here is a leak the fold loop
+    would not catch either, since validation rows exist in the frame when
+    training features are computed.
+
+    `feature_builder` defaults to the Phase 1 matrix, so every existing caller
+    and every Phase 1 number is untouched.
     """
     from . import data as D
 
@@ -244,12 +269,13 @@ def run_cv(
             f"WARNING: {missing_rate:.1%} of rows have no previous auction, so the carry "
             f"baselines are mostly predicting 0.0 and their MAE is not a measurement of carry."
         )
-    X = F.build(df)
+    X = (feature_builder or F.build)(df)
     folds = splits.make_folds(D.date_ids(df), cfg)
 
     per_fold: list[dict] = []
     oof = {m.name: np.full(len(df), np.nan) for m in models}
     coefs: dict[int, pd.Series] = {}
+    importances: dict[str, dict[int, pd.Series]] = {}
 
     for fold in folds:
         tr, va = splits.fold_masks(df, fold)
@@ -267,6 +293,8 @@ def run_cv(
                              "n": int(np.isfinite(y_va).sum())})
             if isinstance(m, RidgeMicro) and m.name == "ridge":
                 coefs[fold.index] = m.coefficients()
+            if hasattr(m, "feature_importance"):
+                importances.setdefault(m.name, {})[fold.index] = m.feature_importance()
 
     scored = np.isfinite(np.stack([oof[m.name] for m in models]).sum(axis=0))
     return {
@@ -277,5 +305,6 @@ def run_cv(
         "scored_mask": scored,
         "df": df,
         "coefficients": coefs,
+        "importances": importances,
         "carry_missing_rate": float(df["revealed_target"].isna().mean()),
     }

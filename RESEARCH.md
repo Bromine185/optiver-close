@@ -425,7 +425,8 @@ number.
 * **Whether the 0.98% edge survives a different model class.** Reproducing it with
   LightGBM under this same harness is the first job of Phase 2, and if the
   boosted model's *linear-feature* edge is not at least this large, the harness is
-  wrong somewhere.
+  wrong somewhere. **Resolved in Phase 2**: `lgbm_row` (same 14 features) scores
+  +0.1009 bps against the ridge's +0.0628 — the edge survives and grows.
 
 ### What Phase 1 does not license anyone to say
 
@@ -438,3 +439,128 @@ number.
 **Tests:** 78, a few seconds (5.2 s on the machine that produced the numbers
 above), all green on the committed smoke fixture with no raw data present. Two of
 them are gated on the full fixture and skip without it.
+
+---
+
+## Phase 2 — Gradient boosting on features with memory
+
+The two changes Phase 1 deferred, made separately measurable: a model class that
+optimises MAE directly, and features that use the past. Same folds, same
+embargo, same floor, same scorecard code — `run_cv` gained a `feature_builder`
+parameter and nothing else about the harness moved. Every number below:
+
+    python scripts/run_phase2.py --preset FULL             # the 2x2 (391 s)
+    python scripts/run_phase2.py --preset FULL --ablate    # + family ablations (1,006 s)
+
+**Replica check first.** The Phase 2 report re-runs Phase 1's zero and ridge
+inside itself: `zero` 6.38518 and `ridge` 6.32235 (+0.06283), identical to
+`phase1_baselines.json` to every printed digit. The comparison below is between
+runs of one harness, not between two harnesses.
+
+### The 2×2, plus the floor
+
+Pooled OOF MAE over the same 3,293,068 scored rows, dates 181–480:
+
+| model | features | MAE (bps) | vs zero (bps) | vs zero (%) |
+|---|---|---|---|---|
+| `lgbm_mem` | 31 (+memory) | **6.25592** | **+0.12926** | **+2.02%** |
+| `lgbm_row` | 14 row-wise | 6.28432 | +0.10087 | +1.58% |
+| `ridge_mem` | 31 (+memory) | 6.31036 | +0.07482 | +1.17% |
+| `ridge` (Phase 1) | 14 row-wise | 6.32235 | +0.06283 | +0.98% |
+| `zero` (floor) | — | 6.38518 | 0 | 0 |
+
+The decomposition, all against the Phase 1 ridge:
+
+| gain | bps |
+|---|---|
+| model class alone (`lgbm_row` − `ridge`) | +0.0380 |
+| memory features under a linear model (`ridge_mem` − `ridge`) | +0.0120 |
+| both together (`lgbm_mem` − `ridge`) | +0.0664 |
+| interaction (both − sum of parts) | **+0.0164** |
+
+The interaction term is a quarter of the whole move: the trees extract more from
+the memory features than the sum of "better model" and "more features" predicts.
+That is what `objective="l1"` on nonlinear structure buys — and it is also why a
+2×2 was worth running instead of one confounded jump.
+
+LightGBM hyperparameters were fixed a priori (`boosted.LGBM_PARAMS`, recorded
+verbatim in the report) and were not moved after seeing any validation number.
++2.02% is a *measurement* of the default configuration, not the ceiling of a
+search. Both Phase 1 ridge corrections (target winsorisation, MAE rescale) fall
+away here — the objective is the metric.
+
+### Consistency
+
+`lgbm_mem` vs zero: better in **5 of 5 folds** (paired mean +0.1293); better on
+**100.0% of the 300 validation dates** — the worst single date is still
++0.0369 bps; better at **all 55 buckets**; better on **96.0% of the 200 stocks**
+(worst −0.2249, best +0.9532). The date-level sweep is the strongest consistency
+statement this project has produced: Phase 1's ridge lost on 2.3% of dates,
+Phase 2's model loses on none.
+
+Per-bucket structure, against the ridge's monotone decay: the edge is 6.8% at
+s = 0, holds between 1.0% and 2.5% through the middle, bumps to **3.9% at
+exactly s = 300** (the indicative-cross publication, the same landmark Phase 1
+found) — and adds a new landmark, **6.7% at s = 540**, the auction's final
+bucket, where predict-zero's MAE jumps from 4.87 to 6.66 and the model recovers
+most of the jump. The last bucket's labels are among the unverifiable ones (the
+horizon leaves the data), so this is noted, not interpreted.
+
+### Importance is not value: the family ablation
+
+Share of total gain (mean over folds, `lgbm_mem`): Phase 1 row features 56.6%,
+cross-sectional 24.4%, rolling 14.6%, state 4.3%. Two findings and a lesson.
+
+**`size_imbalance` alone carries 24.2% of total gain** — the single largest
+feature — after five folds of ridge gave it a stable but tiny −0.09
+coefficient. Bounded in [−1, 1], no winsorisation, no scale issues: the signal
+was always there, it just is not linear. This is the cleanest single
+demonstration of what the model-class change bought.
+
+**The drop-one-family ablation, pooled OOF (cost of removal, bps):**
+
+| family removed | pooled | per-fold |
+|---|---|---|
+| rolling | **+0.0184** | positive in 5/5 (0.0148–0.0202) |
+| cross-sectional | +0.0063 | positive in 5/5, decaying (0.0134 → 0.0013) |
+| state | **−0.0002** | straddles zero (−0.0018 to +0.0015) |
+| all three (= `lgbm_row`) | +0.0284 | — |
+
+The marginal costs do not sum to the total (0.0245 vs 0.0284): the families are
+partially redundant, and the redundancy is itself information — cross-sectional
+context can be partially reconstructed from row features plus rolling state.
+
+**Null result: the state family adds nothing.** Removing
+`stock_vol_20d_bps` + `revealed_abs_bps` (and their indicators) leaves the model
+*equal* — −0.0002 bps, per-fold noise on both sides of zero — despite the pair
+showing 4.3% of gain importance. Importance measures where the trees spent
+splits, not what the splits were worth; the vol state the revealed targets
+carry is evidently already spanned by the book itself (spread, depth, and the
+rolling realised vol of the auction under way). The carry epitaph now has a
+second line: yesterday's target was worth nothing as a level (Phase 1, 42.6%
+worse than zero), and its scale is worth nothing *on top of the live book*
+either. Killed for Phase 3: any feature whose only input is the revealed-target
+stream. The embargo, note, is now genuinely load-bearing either way — the
+rolling and cross-sectional families are what it was pre-paid for.
+
+**And the cross-sectional caveat.** 24.4% of importance, +0.0063 of marginal
+value, and a decaying per-fold profile (fold 0 +0.0134 → fold 4 +0.0013). With
+`date_id` anonymised the decay cannot be attributed — more training data
+teaching the trees to reconstruct the cross-section from row features is the
+boring candidate, a regime change is the untestable one. Recorded, not resolved.
+
+### What Phase 2 does not license anyone to say
+
+* Still nothing about the leaderboard — nothing was scored through the
+  competition API.
+* Not that +2.02% is what LightGBM "can do" here: the parameters are
+  deliberately untuned defaults. A tuned number would need a nested split and
+  its own log entry.
+* Not that the state family would fail in a live setting with richer history —
+  481 dates cap the trailing window at one regime of one market.
+
+**Tests:** 98 (Phase 1's 78 + 20), all green on the committed smoke fixture; the
+new causality tests prove every Phase 2 feature is truncation-invariant at the
+live API's actual information set (past dates complete, today cut at bucket s),
+and a perturbation test covers the case truncation cannot: scaling date d's
+targets moves later dates' state features and does not move date d's own.

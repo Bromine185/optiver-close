@@ -154,18 +154,48 @@ comparison with these numbers.
 scripts/build_fixture.py    ONE pass over train.csv -> fixtures + manifest
 scripts/run_baselines.py    coverage, target stats, purged CV, MAE tables
 scripts/run_ablations.py    ablations, carry autocorrelation, per-stock spread
+scripts/run_phase2.py       the 2x2 (ridge/lgbm x row/memory) + family ablations
 src/optiver/
   config.py                 SMOKE / FULL presets, auction geometry, paths
   seeding.py                label-forked seeded RNG
   data.py                   fixture loader, revealed-target join, coverage
   splits.py                 purged, embargoed, forward-chaining folds  <- load-bearing
-  features.py               row-wise microstructure features
+  features.py               row-wise microstructure features (Phase 1)
+  features2.py              CAUSAL features with memory: rolling / cross-sectional / state
   evaluate.py               MAE + per-fold / per-stock / per-bucket breakdowns
   baselines.py              zero, constant-median, carry, ridge; the CV runner
-tests/                      78 tests, seconds; 76 need no fixture but the smoke one
+  boosted.py                LightGBM optimising MAE directly, params fixed a priori
+tests/                      98 tests, seconds; green on a fresh clone via the smoke fixture
 reports/phase1_baselines.json   machine-readable copy of the log's numbers
 reports/phase1_ablations.json   the ablation table and the three analyses beside it
+reports/phase2_lgbm.json        the 2x2 scorecard, importances, consistency slices
 ```
+
+## Phase 2, and what its guards inherit
+
+Phase 2 keeps the Phase 1 harness byte-for-byte — same folds, same embargo,
+same floor — and re-runs Phase 1's ridge inside every Phase 2 report as a
+replica check. Its own rules:
+
+* **Features must be causal, and causality is tested by truncation.** A row may
+  use past buckets of its own auction, the current cross-section, and previous
+  dates' revealed targets — exactly the live API's information set. Cutting the
+  frame at bucket s of the last date (or at date d) and rebuilding must leave
+  every surviving row bit-identical; `tests/test_features2.py` runs both cuts,
+  plus a perturbation test truncation cannot catch (scaling date d's targets
+  must not move date d's own state features).
+* **The carry verdict binds.** Revealed targets enter as STATE (|target|,
+  trailing scale) and never as a signed level — Phase 1 measured the level at
+  42.6% worse than zero, ρ = 0.027, and killed the family.
+* **LightGBM hyperparameters were fixed a priori and are not tuned on any
+  validation fold.** The first boosted number in the log is a measurement, not
+  the argmax of a search. Tuning, if ever, gets a nested split inside training
+  dates and its own log entry.
+* **Rolling-feature truncation at the auction open carries no indicator** — a
+  deliberate, argued exception to non-negotiable #3: the absence is a
+  deterministic function of `seconds_in_bucket`, which is already a feature, so
+  an indicator would duplicate it. State-family absence varies by stock history
+  and keeps the indicator+neutral treatment.
 
 ## Data policy
 
