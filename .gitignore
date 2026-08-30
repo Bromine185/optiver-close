@@ -22,6 +22,14 @@ models/
 .DS_Store
 scratch/
 runs/
+.pytest_cache/
+
+# Interview preparation, deliberately NOT published. This repo is public and is
+# named after the firm's own competition; a rehearsal script and an answer key to
+# anticipated questions are not research artifacts and do not belong in it. The
+# rigour they draw on is already public in CLAUDE.md and RESEARCH.md.
+DEMO_SCRIPT.md
+INTERVIEW_PREP.md
 
 # Built fixture: 130 MB, rebuilt from data/raw/ by scripts/build_fixture.py in
 # seconds (the run records its own `build_seconds` in the manifest), pinned by the

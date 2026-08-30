@@ -1,0 +1,1083 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>optiver-close — the harness and the floor</title>
+<meta name="description" content="Predicting 60-second index-relative moves in the Nasdaq closing auction. Purged, embargoed, date-indivisible cross-validation; a 6.385 bps predict-zero floor; +2.02% of edge from an untuned LightGBM — with the kill list published beside the wins.">
+<meta name="theme-color" content="#0E1418">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="optiver-close">
+<meta property="og:title" content="optiver-close — the harness and the floor">
+<meta property="og:description" content="Predicting 60-second index-relative moves in the Nasdaq closing auction. Purged, embargoed, date-indivisible cross-validation; a 6.385 bps predict-zero floor; +2.02% of edge from an untuned LightGBM — with the kill list published beside the wins.">
+<meta property="og:url" content="https://optiver-close.vercel.app/">
+<meta property="og:image" content="https://optiver-close.vercel.app/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="optiver-close: 5.24M rows, 200 stocks, 481 auction days, +2.02% edge over the predict-zero floor">
+<meta name="twitter:card" content="summary_large_image">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Instrument+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+  /* ============ tokens — committed single-theme: a terminal at the close ============ */
+  :root {
+    color-scheme: dark;
+    --ground:      #0E1418;
+    --panel:       #151D24;
+    --panel-2:     #1A242D;
+    --hairline:    #263039;
+    --hairline-2:  #31404C;
+    --ink:         #E7EDF2;
+    --ink-2:       #9DACB9;
+    --ink-3:       #63758433;
+    --muted:       #63758B;
+    --amber:       #E8A33D;   /* UI accent (display text, rules)   */
+    --amber-mark:  #C98500;   /* chart mark amber — validated      */
+    --blue-mark:   #3987E5;   /* chart mark blue  — validated      */
+    --blue-soft:   #3987E549;
+    --red:         #E66767;   /* status: killed — never a series   */
+    --red-dim:     #E667671f;
+    --serif: "Instrument Serif", Georgia, "Times New Roman", serif;
+    --sans:  "Instrument Sans", -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+    --mono:  "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  ::selection { background: #E8A33D33; }
+
+  a { color: var(--amber); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  a:focus-visible, button:focus-visible { outline: 2px solid var(--amber); outline-offset: 3px; border-radius: 2px; }
+
+  /* ============ progress + nav ============ */
+  #bar { position: fixed; top: 0; left: 0; height: 2px; width: 0%; background: var(--amber); z-index: 60; }
+  nav {
+    position: sticky; top: 0; z-index: 50;
+    display: flex; align-items: center; gap: 1.4rem;
+    padding: .65rem clamp(1rem, 4vw, 2.5rem);
+    background: #0E1418E6; backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--hairline);
+    font-family: var(--mono); font-size: .72rem; letter-spacing: .04em;
+    overflow-x: auto; white-space: nowrap;
+  }
+  nav .brand { color: var(--ink); font-weight: 600; margin-right: auto; }
+  nav .brand em { color: var(--amber); font-style: normal; }
+  nav a { color: var(--ink-2); }
+  nav a:hover { color: var(--ink); text-decoration: none; }
+
+  /* ============ layout ============ */
+  .wrap { max-width: 1060px; margin: 0 auto; padding: 0 clamp(1rem, 4vw, 2.5rem); }
+  section { padding: clamp(3.2rem, 7vw, 5.5rem) 0; border-top: 1px solid var(--hairline); }
+  section:first-of-type { border-top: none; }
+  .eyebrow {
+    font-family: var(--mono); font-size: .72rem; letter-spacing: .18em;
+    color: var(--amber); text-transform: uppercase; margin: 0 0 1rem;
+  }
+  .eyebrow .n { color: var(--muted); margin-right: .8em; }
+  h1, h2, h3 { font-family: var(--serif); font-weight: 400; line-height: 1.12; text-wrap: balance; margin: 0; }
+  h2 { font-size: clamp(1.9rem, 4vw, 2.8rem); letter-spacing: .005em; }
+  h2 em, h1 em, .lede em { font-style: italic; color: var(--amber); }
+  .lede { max-width: 62ch; color: var(--ink-2); font-size: 1.06rem; margin: 1.1rem 0 0; }
+  .lede strong, p strong { color: var(--ink); font-weight: 600; }
+  p { max-width: 66ch; }
+  .body-col p { color: var(--ink-2); }
+  .num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+  /* ============ reveal animation ============ */
+  .rv { opacity: 0; transform: translateY(18px); transition: opacity .7s ease, transform .7s cubic-bezier(.2,.7,.2,1); }
+  .rv.in { opacity: 1; transform: none; }
+  .sr-only {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+    overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0;
+  }
+  .rv.d1 { transition-delay: .08s; } .rv.d2 { transition-delay: .16s; } .rv.d3 { transition-delay: .24s; }
+  @media (prefers-reduced-motion: reduce) {
+    .rv { opacity: 1; transform: none; transition: none; }
+  }
+
+  /* ============ hero ============ */
+  header.hero { padding: clamp(3.5rem, 9vh, 6.5rem) 0 0; }
+  .hero-kicker { font-family: var(--mono); font-size: .74rem; letter-spacing: .16em; color: var(--ink-2); text-transform: uppercase; }
+  .hero-kicker b { color: var(--amber); font-weight: 500; }
+  h1 { font-size: clamp(2.9rem, 7.5vw, 5.2rem); margin: .9rem 0 0; }
+  .hero-sub { max-width: 58ch; font-size: 1.12rem; color: var(--ink-2); margin: 1.4rem 0 0; }
+  .hero-thesis {
+    font-family: var(--serif); font-size: clamp(1.25rem, 2.6vw, 1.7rem); font-style: italic;
+    color: var(--ink); border-left: 2px solid var(--amber);
+    padding: .35rem 0 .35rem 1.2rem; margin: 2.2rem 0 0; max-width: 34em;
+  }
+  .statrow {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1px; background: var(--hairline); border: 1px solid var(--hairline);
+    margin: 3rem 0 0; border-radius: 6px; overflow: hidden;
+  }
+  .stat { background: var(--panel); padding: 1.1rem 1.1rem; }
+  .stat .v { font-family: var(--mono); font-size: clamp(1.05rem, 1.9vw, 1.45rem); font-weight: 500; color: var(--ink); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .stat .k { font-family: var(--mono); font-size: .68rem; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin-top: .25rem; }
+  .stat.hot .v { color: var(--amber); }
+
+  /* auction strip */
+  .strip { margin: 3.4rem 0 0; }
+  .strip .ticks { display: flex; gap: 3px; align-items: flex-end; height: 34px; }
+  .strip .tick { flex: 1; height: 12px; background: var(--hairline-2); border-radius: 1px; }
+  .strip .tick.land { background: #6b5a2f; }
+  @media (prefers-reduced-motion: no-preference) {
+    .strip .tick { animation: tickpulse 6.5s ease-in-out infinite; animation-delay: calc(var(--i) * 0.085s); }
+    @keyframes tickpulse {
+      0%, 12%, 100% { background: var(--hairline-2); height: 12px; }
+      4% { background: var(--amber); height: 26px; }
+    }
+  }
+  .strip .lbls { display: flex; justify-content: space-between; font-family: var(--mono); font-size: .68rem; color: var(--muted); margin-top: .5rem; letter-spacing: .04em; }
+  .strip .lbls b { color: var(--ink-2); font-weight: 500; }
+
+  /* ============ cards ============ */
+  .cards { display: grid; gap: 1rem; margin-top: 2rem; }
+  .cards.c3 { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+  .cards.c2 { grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+  .card {
+    background: var(--panel); border: 1px solid var(--hairline); border-radius: 8px;
+    padding: 1.3rem 1.4rem;
+  }
+  .card h3 { font-size: 1.28rem; margin-bottom: .6rem; }
+  .card p { font-size: .92rem; color: var(--ink-2); margin: .4rem 0 0; }
+  .card .file { font-family: var(--mono); font-size: .7rem; color: var(--muted); word-break: break-all; display: block; margin-top: .9rem; padding-top: .7rem; border-top: 1px dashed var(--hairline); }
+  .card .big { font-family: var(--mono); font-size: 1.5rem; color: var(--amber); font-variant-numeric: tabular-nums; }
+
+  /* kill cards */
+  .card.kill { border-color: #4a2a28; position: relative; overflow: hidden; }
+  .stamp {
+    display: inline-block; font-family: var(--mono); font-size: .66rem; font-weight: 600;
+    letter-spacing: .22em; text-transform: uppercase; color: var(--red);
+    border: 1px solid var(--red); border-radius: 3px; padding: .18rem .55rem .12rem;
+    transform: rotate(-2deg); margin-bottom: .8rem; background: var(--red-dim);
+  }
+  .stamp.keep { color: var(--amber); border-color: var(--amber); background: #E8A33D14; }
+
+  /* ============ equation ============ */
+  .eq-wrap { margin: 2.4rem 0 0; overflow-x: auto; }
+  .eq {
+    font-family: var(--mono); font-size: clamp(.85rem, 2vw, 1.15rem);
+    background: var(--panel); border: 1px solid var(--hairline); border-radius: 8px;
+    padding: 1.6rem 1.6rem 1.2rem; display: inline-flex; flex-wrap: wrap; gap: .1rem 0; align-items: flex-start;
+    min-width: min(100%, 640px);
+  }
+  .eq .grp { display: flex; flex-direction: column; align-items: center; gap: .55rem; padding: 0 .1rem; }
+  .eq .t { white-space: nowrap; color: var(--ink); }
+  .eq .t.a { color: var(--amber); }
+  .eq .t.b { color: #6FA8E8; }
+  .eq .cap { font-size: .64rem; letter-spacing: .06em; color: var(--muted); text-transform: uppercase; text-align: center; line-height: 1.35; }
+
+  /* ============ figures ============ */
+  figure { margin: 2.2rem 0 0; background: var(--panel); border: 1px solid var(--hairline); border-radius: 10px; padding: 1.2rem 1.2rem 1rem; }
+  figure figcaption { font-size: .84rem; color: var(--muted); margin-top: .8rem; max-width: 75ch; line-height: 1.5; }
+  figure figcaption b { color: var(--ink-2); font-weight: 600; }
+  .fig-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: .4rem 1.4rem; margin-bottom: 1rem; }
+  .fig-title { font-family: var(--sans); font-weight: 600; font-size: .95rem; color: var(--ink); }
+  .legend { display: flex; gap: 1.2rem; flex-wrap: wrap; font-family: var(--mono); font-size: .7rem; color: var(--ink-2); margin-left: auto; }
+  .legend .li { display: inline-flex; align-items: center; gap: .45rem; }
+  .sw { width: 18px; height: 0; border-top: 3px solid; border-radius: 2px; display: inline-block; }
+  .sw.dash { border-top-style: dashed; }
+  .sw.box { width: 12px; height: 12px; border: none; border-radius: 2px; }
+  .chart { position: relative; }
+  .chart svg { display: block; width: 100%; height: auto; }
+  .tip {
+    position: absolute; pointer-events: none; z-index: 5; display: none;
+    background: #0B1014F2; border: 1px solid var(--hairline-2); border-radius: 6px;
+    padding: .55rem .7rem; font-family: var(--mono); font-size: .7rem; line-height: 1.7;
+    color: var(--ink-2); white-space: nowrap; box-shadow: 0 8px 24px #0009;
+  }
+  .tip b { color: var(--ink); font-weight: 600; }
+  .tip .tz { color: var(--ink-2); } .tip .tm { color: var(--amber); }
+
+  /* svg text */
+  svg text { font-family: var(--mono); fill: var(--ink-2); }
+  svg .ax { font-size: 11px; fill: var(--muted); }
+  svg .lbl { font-size: 11.5px; }
+  svg .ann { font-size: 11px; fill: var(--ink-2); }
+  svg .grid { stroke: var(--hairline); stroke-width: 1; }
+
+  /* line draw */
+  @media (prefers-reduced-motion: no-preference) {
+    .draw path.series { transition: stroke-dashoffset 1.6s ease .2s; }
+    .growx { transform: scaleX(0); transform-origin: left center; transition: transform .9s cubic-bezier(.2,.7,.2,1); }
+    .in .growx, .growx.in { transform: scaleX(1); }
+  }
+
+  /* ============ scoreboard (HTML bars) ============ */
+  .board { margin-top: 2rem; display: flex; flex-direction: column; gap: .55rem; }
+  .brow { display: grid; grid-template-columns: minmax(90px, 150px) 1fr minmax(150px, auto); gap: 1rem; align-items: center; }
+  .brow .m { font-family: var(--mono); font-size: .78rem; color: var(--ink); text-align: right; }
+  .brow .m small { display: block; color: var(--muted); font-size: .64rem; }
+  .btrack { position: relative; height: 26px; background: var(--panel-2); border-radius: 4px; overflow: hidden; }
+  .bfill { position: absolute; inset: 2px auto 2px 2px; border-radius: 3px; }
+  .bfill.amber { background: var(--amber-mark); } .bfill.blue { background: var(--blue-mark); }
+  .bfill.ghost { background: var(--hairline-2); }
+  .brow .v { font-family: var(--mono); font-size: .78rem; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+  .brow .v b { color: var(--ink); font-weight: 600; }
+  .brow.dim .m, .brow.dim .v { color: var(--muted); }
+  .chips { display: flex; flex-wrap: wrap; gap: .6rem; margin-top: 1.6rem; }
+  .chip {
+    font-family: var(--mono); font-size: .72rem; color: var(--ink-2);
+    border: 1px solid var(--hairline-2); background: var(--panel); border-radius: 99px;
+    padding: .35rem .85rem;
+  }
+  .chip b { color: var(--amber); font-weight: 600; }
+
+  /* 2x2 */
+  .grid22 { display: grid; grid-template-columns: 110px 1fr 1fr; gap: 1px; background: var(--hairline); border: 1px solid var(--hairline); border-radius: 8px; overflow: hidden; margin-top: 1.6rem; max-width: 640px; }
+  .grid22 > div { background: var(--panel); padding: .9rem 1rem; font-size: .8rem; }
+  .grid22 .h { font-family: var(--mono); font-size: .66rem; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); display: flex; align-items: center; }
+  .grid22 .cell .mv { font-family: var(--mono); font-size: 1.15rem; color: var(--ink); font-variant-numeric: tabular-nums; }
+  .grid22 .cell .dv { font-family: var(--mono); font-size: .72rem; color: var(--amber); }
+  .grid22 .cell .nm { font-family: var(--mono); font-size: .66rem; color: var(--muted); margin-top: .1rem; }
+  .grid22 .cell.star { background: linear-gradient(135deg, #1A242D, #23241A); }
+
+  /* tables */
+  .tbl-wrap { overflow-x: auto; margin-top: 1.6rem; }
+  table { border-collapse: collapse; font-size: .85rem; min-width: 560px; width: 100%; }
+  th { font-family: var(--mono); font-size: .66rem; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); text-align: left; font-weight: 500; padding: .5rem .9rem .5rem 0; border-bottom: 1px solid var(--hairline-2); }
+  td { padding: .55rem .9rem .55rem 0; border-bottom: 1px solid var(--hairline); color: var(--ink-2); vertical-align: top; }
+  td.num, th.num { text-align: right; }
+  td b { color: var(--ink); font-weight: 600; }
+  td .inbar { display: inline-block; height: 8px; border-radius: 2px; background: var(--amber-mark); vertical-align: middle; margin-right: .6rem; }
+  td .inbar.neg { background: var(--hairline-2); }
+
+  /* coefficient rows */
+  .coefs { margin-top: 1.4rem; display: flex; flex-direction: column; gap: .3rem; }
+  .crow { display: grid; grid-template-columns: minmax(150px, 220px) 1fr 70px; gap: .8rem; align-items: center; font-family: var(--mono); font-size: .72rem; }
+  .crow .cn { color: var(--ink-2); text-align: right; overflow: hidden; text-overflow: ellipsis; }
+  .crow.hot .cn { color: var(--ink); }
+  .caxis { position: relative; height: 16px; }
+  .caxis::before { content: ""; position: absolute; left: 50%; top: -4px; bottom: -4px; width: 1px; background: var(--hairline-2); }
+  .cbar { position: absolute; top: 3px; height: 10px; border-radius: 2px; background: #4A6478; }
+  .crow.hot .cbar { background: var(--amber-mark); }
+  .crow.flip .cbar { background: repeating-linear-gradient(45deg, #3a4a58 0 4px, transparent 4px 8px); border: 1px solid #3a4a58; }
+  .crow .cv { color: var(--muted); font-variant-numeric: tabular-nums; }
+  .crow.hot .cv { color: var(--amber); }
+  .flip-note { font-family: var(--mono); font-size: .68rem; color: var(--muted); margin-top: .7rem; }
+
+  /* codeblock */
+  pre {
+    font-family: var(--mono); font-size: .8rem; line-height: 1.8; color: var(--ink-2);
+    background: var(--panel); border: 1px solid var(--hairline); border-radius: 8px;
+    padding: 1.2rem 1.4rem; overflow-x: auto; margin: 1.6rem 0 0;
+  }
+  pre .c { color: var(--muted); } pre .g { color: #7FB88B; } pre .a { color: var(--amber); }
+
+  /* quote band */
+  .band {
+    margin: 2.6rem 0 0; padding: 2rem 2.2rem; border-radius: 10px;
+    background: linear-gradient(120deg, var(--panel), #1E2019);
+    border: 1px solid var(--hairline-2);
+  }
+  .band .q { font-family: var(--serif); font-size: clamp(1.25rem, 2.6vw, 1.65rem); font-style: italic; line-height: 1.35; max-width: 30em; }
+  .band .q .hl { color: var(--amber); }
+  .band .who { font-family: var(--mono); font-size: .7rem; color: var(--muted); margin-top: 1rem; letter-spacing: .08em; }
+
+  /* footer */
+  footer { border-top: 1px solid var(--hairline); padding: 2.5rem 0 3.5rem; }
+  footer .cold {
+    font-family: var(--mono); font-size: .74rem; line-height: 2.1; color: var(--ink-2);
+    max-width: 100%;
+  }
+  footer .cold b { color: var(--amber); font-weight: 500; }
+  footer .fin { font-family: var(--mono); font-size: .7rem; color: var(--muted); margin-top: 2rem; }
+
+  .foot-note { font-size: .8rem; color: var(--muted); margin-top: 1.4rem; max-width: 70ch; }
+  .subhead { font-family: var(--sans); font-weight: 600; font-size: 1rem; color: var(--ink); margin: 2.6rem 0 0; letter-spacing: .01em; }
+  .subhead + p { margin-top: .5rem; }
+</style>
+
+<noscript><style>.rv{opacity:1;transform:none}</style></noscript>
+</head>
+<body>
+
+<div id="bar"></div>
+<nav aria-label="Sections">
+  <span class="brand">optiver<em>-close</em></span>
+  <a href="#problem">problem</a>
+  <a href="#split">split</a>
+  <a href="#floor">floor</a>
+  <a href="#ladder">ladder</a>
+  <a href="#edge">edge</a>
+  <a href="#kills">kills</a>
+  <a href="#guards">guards</a>
+  <a href="#repro">repro</a>
+</nav>
+
+<div class="wrap">
+
+<!-- ================================ HERO ================================ -->
+<header class="hero">
+  <p class="hero-kicker rv">Kaggle · <b>Optiver — Trading at the Close</b> · Nasdaq closing auction</p>
+  <h1 class="rv d1">The last ten minutes.</h1>
+  <p class="hero-sub rv d2">Predict the 60-second-ahead, <em>index-relative</em> move of a stock's weighted
+    average price during the Nasdaq closing auction — in basis points, scored by mean absolute error,
+    for 200 stocks at every ten-second tick.</p>
+  <p class="hero-thesis rv d3">&ldquo;Phase&nbsp;1 is a <em>harness and a floor</em>, not a model. The result matters
+    less than the fact that I can trust it.&rdquo;</p>
+
+  <div class="statrow rv d3">
+    <div class="stat"><div class="v num" data-count="5237980">0</div><div class="k">rows staged</div></div>
+    <div class="stat"><div class="v num" data-count="200">0</div><div class="k">stocks</div></div>
+    <div class="stat"><div class="v num" data-count="481">0</div><div class="k">auction days</div></div>
+    <div class="stat"><div class="v num" data-count="55">0</div><div class="k">buckets / auction</div></div>
+    <div class="stat"><div class="v num" data-count="98">0</div><div class="k">tests, all green</div></div>
+    <div class="stat hot"><div class="v num" data-count="2.02" data-dec="2" data-pre="+" data-suf="%">0</div><div class="k">edge over the floor</div></div>
+  </div>
+
+  <div class="strip rv" aria-hidden="true">
+    <div class="ticks" id="ticks"></div>
+    <div class="lbls"><span><b>s&nbsp;=&nbsp;0</b> auction opens</span><span><b>s&nbsp;=&nbsp;300</b> indicative cross publishes</span><span><b>s&nbsp;=&nbsp;540</b> the bell</span></div>
+  </div>
+</header>
+
+<!-- ================================ 01 PROBLEM ================================ -->
+<section id="problem">
+  <p class="eyebrow rv"><span class="n">01</span>The problem</p>
+  <h2 class="rv">One target, three consequences —<br><em>verified, not assumed.</em></h2>
+  <p class="lede rv d1">Before building anything, I reverse-engineered the label. Each consequence below is
+    a test in the repo, and each one shapes everything that follows.</p>
+
+  <div class="eq-wrap rv d2">
+    <div class="eq" role="img" aria-label="target equals the stock's 60 second WAP return minus the index's 60 second return, times ten to the fourth, in basis points">
+      <div class="grp"><span class="t">target<sub>i</sub>(t)&nbsp;=&nbsp;(</span><span class="cap">&nbsp;</span></div>
+      <div class="grp"><span class="t a">WAP<sub>i</sub>(t+60) / WAP<sub>i</sub>(t)</span><span class="cap">the stock's own<br>60-second move</span></div>
+      <div class="grp"><span class="t">&nbsp;−&nbsp;</span><span class="cap">&nbsp;</span></div>
+      <div class="grp"><span class="t b">Index(t+60) / Index(t)</span><span class="cap">one shared leg —<br>all 200 stocks</span></div>
+      <div class="grp"><span class="t">)&nbsp;×&nbsp;10<sup>4</sup></span><span class="cap">basis points</span></div>
+    </div>
+  </div>
+
+  <div class="cards c3">
+    <div class="card rv">
+      <h3>Index-relative ⇒ near zero-mean by construction</h3>
+      <p>The subtraction pins the cross-sectional mean near zero. Predict-zero scores
+        <b class="num">6.4078&nbsp;bps</b> and sits within <b class="num">0.0002&nbsp;bps</b> of the best constant
+        predictor that exists. It is not a straw man — every number in the project is quoted against it.</p>
+      <span class="file">tests/test_target_definition.py::test_the_target_is_near_zero_mean_by_construction</span>
+    </div>
+    <div class="card rv d1">
+      <h3>The horizon is exactly 6 buckets — not 5, not 7</h3>
+      <p>(Own WAP return − target) collapses to a constant across all 200 stocks at lag&nbsp;6; at lag 5 or 7
+        its spread is <b class="num">691×</b> larger. After <span class="num">s&nbsp;=&nbsp;480</span> the horizon leaves
+        the data — those labels can't be re-derived, and that's recorded, not ignored.</p>
+      <span class="file">tests/test_target_definition.py::test_the_horizon_is_six_buckets_and_not_five_or_seven</span>
+    </div>
+    <div class="card rv d2">
+      <h3>All 200 stocks share one index leg</h3>
+      <p>Within a (date,&nbsp;second), the recovered index leg is constant across stocks to
+        <b class="num">σ&nbsp;=&nbsp;0.005&nbsp;bps</b> — the data's own quantisation. The weights aren't staged, so the
+        leg is <b>demonstrable but not reconstructible</b> — and it's the second, less obvious reason a date
+        may never be split across folds.</p>
+      <span class="file">tests/test_target_definition.py::test_target_is_a_60_second_return_minus_a_common_index_leg</span>
+    </div>
+  </div>
+
+  <p class="foot-note rv">Known limitation, stated first: <b>date_id is anonymised and unmapped</b> — 481 integers,
+    no calendar. No regime claims, no event studies, no calendar features. Anything that depends on knowing
+    <i>when</i> these days were is unsupportable and is not claimed anywhere below.</p>
+</section>
+
+<!-- ================================ 02 SPLIT ================================ -->
+<section id="split">
+  <p class="eyebrow rv"><span class="n">02</span>Cross-validation</p>
+  <h2 class="rv">The split is <em>the product.</em></h2>
+  <p class="lede rv d1">Nothing is ever split on rows. The unit of assignment is a <span class="num">date_id</span> —
+    a date takes all 200 stocks and all 55 buckets with it. Five purged, embargoed, forward-chaining folds
+    score 300 of the 481 dates.</p>
+
+  <figure class="rv d2">
+    <div class="fig-head">
+      <span class="fig-title">Five folds over the date axis, 0 → 480</span>
+      <span class="legend">
+        <span class="li"><span class="sw box" style="background:var(--blue-soft); border:1px solid var(--blue-mark)"></span>train (expanding)</span>
+        <span class="li"><span class="sw box" style="background:repeating-linear-gradient(45deg,#63758B 0 3px,transparent 3px 6px)"></span>embargo · 5 dates</span>
+        <span class="li"><span class="sw box" style="background:var(--amber-mark)"></span>validation · 60 dates</span>
+      </span>
+    </div>
+    <div class="chart"><svg id="folds" viewBox="0 0 960 320" role="img" aria-label="Fold diagram: five expanding training windows, each followed by a five date embargo and sixty validation dates"></svg></div>
+    <figcaption><b>Why the embargo exists even though it buys nothing yet:</b> no label crosses a date boundary
+      (60&nbsp;s ≪ one auction), so a strict López&nbsp;de&nbsp;Prado purge would remove <i>nothing</i>. The embargo guards
+      <b>feature</b> autocorrelation — Phase&nbsp;1's features have no memory, so it costs 5 dates and buys nothing.
+      It's pre-paid so Phase&nbsp;2's rolling features don't force a harness change that would invalidate every comparison.</figcaption>
+  </figure>
+
+  <div class="tbl-wrap rv">
+    <table>
+      <caption class="sr-only">Leakage channels closed by the split</caption>
+      <thead><tr><th>Leakage channel</th><th>What it looks like</th><th>Guard</th></tr></thead>
+      <tbody>
+        <tr><td><b>Row-level</b></td><td>labels at s and s+10 share 50 of their 60 seconds; a random K-fold puts one auction in both sets</td><td>dates are indivisible</td></tr>
+        <tr><td><b>Cross-sectional</b></td><td>stock A's date-<i>d</i> rows in train, stock B's in validation — both quoted against the same index leg</td><td>dates are indivisible</td></tr>
+        <tr><td><b>Temporal</b></td><td>training to the boundary where auction state autocorrelates day-to-day</td><td>5-date embargo + strict forward chaining</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="foot-note rv"><span class="num">check_fold</span> is a <b>runtime guard</b>, not just a test — and
+    <span class="num">test_check_fold_rejects_a_hand_built_leaky_fold</span> proves the guard itself works. The split
+    also survives a date axis with holes: <span class="num">test_guarantee_holds_when_date_ids_are_not_contiguous</span>.</p>
+</section>
+
+<!-- ================================ 03 FLOOR ================================ -->
+<section id="floor">
+  <p class="eyebrow rv"><span class="n">03</span>The baseline</p>
+  <h2 class="rv">An honest floor: <em>6.385&nbsp;bps.</em></h2>
+  <p class="lede rv d1">Predict-zero over the 3,293,068 out-of-fold rows. The best constant that exists — the
+    training median — beats it by <strong>0.0002&nbsp;bps</strong>. That is the <em>entire</em> value of knowing the
+    target's location, so every model below is judged by what it adds on top of zero.</p>
+
+  <figure class="rv d2">
+    <div class="fig-head">
+      <span class="fig-title">Per-fold MAE — the floor moves 10× more than any model does</span>
+      <span class="legend">
+        <span class="li"><span class="sw box" style="background:#8FA0AE"></span>predict-zero</span>
+        <span class="li"><span class="sw box" style="background:var(--amber-mark)"></span>lgbm_mem (best model)</span>
+      </span>
+    </div>
+    <div class="chart"><svg id="dumb" viewBox="0 0 960 310" role="img" aria-label="Dumbbell chart: per fold, predict-zero MAE against the best model's MAE. The fold to fold spread is far larger than the model improvement."></svg></div>
+    <figcaption>Fold-to-fold, predict-zero swings <b class="num">5.82&nbsp;→&nbsp;7.13&nbsp;bps</b> — a spread of
+      <b class="num">1.31&nbsp;bps</b>, roughly <b>10×</b> the best model effect (<span class="num">0.13&nbsp;bps</span>).
+      With <span class="num">date_id</span> anonymised, the cause is unknowable — which is why every comparison is
+      <b>paired within fold</b>, never pooled across them.</figcaption>
+  </figure>
+</section>
+
+<!-- ================================ 04 LADDER ================================ -->
+<section id="ladder">
+  <p class="eyebrow rv"><span class="n">04</span>Results</p>
+  <h2 class="rv">The ladder: every rung <em>earned separately.</em></h2>
+  <p class="lede rv d1">Phase&nbsp;1 proves linear signal exists under a split I trust. Phase&nbsp;2 changes exactly two
+    things — model class, then features with memory — and measures each one alone before measuring both.
+    Same folds, same embargo, same floor; the Phase&nbsp;2 report re-runs Phase&nbsp;1 inside itself as a replica check
+    and reproduces it to every printed digit.</p>
+
+  <div class="board rv d2" id="board"></div>
+
+  <div class="chips rv">
+    <span class="chip">lgbm_mem beats zero in <b>5 / 5 folds</b></span>
+    <span class="chip">on <b>100%</b> of 300 validation dates — worst date still <b>+0.037</b></span>
+    <span class="chip">at <b>all 55</b> buckets</span>
+    <span class="chip">on <b>96%</b> of 200 stocks</span>
+    <span class="chip">params fixed <b>a&nbsp;priori</b> — a measurement, not a search</span>
+  </div>
+
+  <p class="subhead rv">The 2×2: why both changes were made separately</p>
+  <div class="grid22 rv d1">
+    <div class="h"></div><div class="h">14 row-wise features</div><div class="h">+ 17 memory features</div>
+    <div class="h">ridge</div>
+    <div class="cell"><div class="mv">6.3224</div><div class="dv">+0.0628 vs zero</div><div class="nm">ridge · Phase 1</div></div>
+    <div class="cell"><div class="mv">6.3104</div><div class="dv">+0.0748</div><div class="nm">ridge_mem</div></div>
+    <div class="h">lightgbm · L1</div>
+    <div class="cell"><div class="mv">6.2843</div><div class="dv">+0.1009</div><div class="nm">lgbm_row</div></div>
+    <div class="cell star"><div class="mv">6.2559</div><div class="dv">+0.1293 · +2.02%</div><div class="nm">lgbm_mem</div></div>
+  </div>
+  <p class="foot-note rv">Model class alone <span class="num">+0.038</span> · memory features alone <span class="num">+0.012</span> ·
+    both <span class="num">+0.066</span> — the <b>interaction term is +0.016, a quarter of the whole move</b>. The trees
+    extract more from the memory features than the sum of the parts predicts; that's what <span class="num">objective="l1"</span>
+    on nonlinear structure buys, and it's why a 2×2 beats one confounded jump.</p>
+</section>
+
+<!-- ================================ 05 EDGE ================================ -->
+<section id="edge">
+  <p class="eyebrow rv"><span class="n">05</span>Anatomy of the edge</p>
+  <h2 class="rv">Where the signal lives —<br><em>and the landmark that proves it's real.</em></h2>
+  <p class="lede rv d1">The edge is largest at the auction open, holds through the middle, and spikes at exactly
+    <strong>s&nbsp;=&nbsp;300</strong> — the second the exchange first publishes the indicative crossing prices. A bump the
+    model has no way to fake is independent confirmation that <span class="num">near/far_price</span> carry real
+    information. Hover the chart.</p>
+
+  <figure class="rv d2">
+    <div class="fig-head">
+      <span class="fig-title">MAE across the auction, and the edge over the floor</span>
+      <span class="legend">
+        <span class="li"><span class="sw dash" style="border-color:#8FA0AE"></span>predict-zero (floor)</span>
+        <span class="li"><span class="sw" style="border-color:var(--amber-mark)"></span>lgbm_mem</span>
+        <span class="li"><span class="sw box" style="background:var(--amber-mark)"></span>edge, % of floor</span>
+      </span>
+    </div>
+    <div class="chart" id="edgewrap">
+      <svg id="edgechart" viewBox="0 0 960 600" role="img" aria-label="Two panels sharing a time axis over the 540 second auction. Top: mean absolute error for predict-zero and the model. Bottom: percent improvement per ten-second bucket, with landmarks at zero, three hundred, and five hundred forty seconds."></svg>
+      <div class="tip" id="edgetip"></div>
+    </div>
+    <figcaption><b>Difficulty is not flat:</b> predict-zero's MAE peaks at <b class="num">9.69&nbsp;bps at s&nbsp;=&nbsp;270</b> —
+      uncertainty crests mid-auction, not at either end — then falls to 4.87 before the final climb into the bell.
+      At <b class="num">s&nbsp;=&nbsp;540</b> the floor jumps and the model recovers most of it (<b class="num">+6.7%</b>);
+      those last labels are the unverifiable ones, so this is noted, not interpreted.</figcaption>
+  </figure>
+
+  <p class="subhead rv">The economics: reversion toward the reference price</p>
+  <p class="rv body-col" style="color:var(--ink-2)">Two coefficients do the work, sign-stable in all five folds: when the continuous
+    book's WAP is rich to the auction's reference price, the next 60 seconds move relatively down. Everything
+    below the top three is an order of magnitude smaller.</p>
+
+  <figure class="rv d1">
+    <div class="fig-head"><span class="fig-title">Ridge coefficients — bps of target per 1&nbsp;sd of feature, mean over folds</span></div>
+    <div class="coefs" id="coefs"></div>
+    <p class="flip-note">▨ striped = sign flips across folds — reported as carrying nothing, which is cheaper than implying otherwise.</p>
+  </figure>
+
+  <p class="subhead rv">Importance is not value — the family ablation</p>
+  <div class="tbl-wrap rv d1">
+    <table>
+      <thead><tr><th>Feature family removed</th><th class="num">Gain importance</th><th class="num">Actual cost of removal</th><th>Verdict</th></tr></thead>
+      <tbody>
+        <tr><td><b>rolling</b> (within-auction memory)</td><td class="num">14.6%</td><td class="num"><span class="inbar" style="width:74px"></span><b>+0.0184</b></td><td>the family the embargo was pre-paid for; positive in 5/5 folds</td></tr>
+        <tr><td><b>cross-sectional</b> (today's other 199 stocks)</td><td class="num">24.4%</td><td class="num"><span class="inbar" style="width:25px"></span><b>+0.0063</b></td><td>real but decaying fold-to-fold; recorded, not resolved</td></tr>
+        <tr><td><b>state</b> (revealed targets as vol/scale)</td><td class="num">4.3%</td><td class="num"><span class="inbar neg" style="width:2px"></span><b>−0.0002</b></td><td><span style="color:var(--red)">worthless</span> — importance measured where trees spent splits, not what they were worth</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="foot-note rv"><b class="num" style="color:var(--amber)">size_imbalance</b> is the flip side: a stable but
+    tiny −0.04 under ridge, then the <b>single largest feature at 24.2% of total gain</b> under LightGBM. Bounded in
+    [−1,&nbsp;1], no scale issues — the signal was always there, it just isn't linear. The cleanest demonstration of
+    what the model-class change bought.</p>
+</section>
+
+<!-- ================================ 06 KILLS ================================ -->
+<section id="kills">
+  <p class="eyebrow rv"><span class="n">06</span>Null results</p>
+  <h2 class="rv">The kill list — <em>paid for once, saved from twice.</em></h2>
+  <p class="lede rv d1">A log that only contains wins is a marketing document. These are the hypotheses this
+    project measured, killed, and wrote down — each one a Phase-2 temptation that will never waste an afternoon.</p>
+
+  <figure class="rv d2">
+    <div class="fig-head"><span class="fig-title">On one scale: what research earns vs what a leaky harness would hide</span></div>
+    <div class="chart"><svg id="scale" viewBox="0 0 960 200" role="img" aria-label="Bar chart on a shared scale: ridge and the boosted model earn small positive slivers of basis points over zero, while carrying yesterday's target loses 2.7 basis points."></svg></div>
+    <figcaption>The edges honest research buys here are <b>slivers</b> — +0.06, +0.13 bps. The mistake a bad split
+      would have hidden is <b>the whole bar</b>. This is why the harness came before the model.</figcaption>
+  </figure>
+
+  <div class="cards c2" style="margin-top:2rem">
+    <div class="card kill rv">
+      <span class="stamp">Killed · Phase 1</span>
+      <h3>&ldquo;Yesterday's move persists&rdquo;</h3>
+      <p>Carrying the previous auction's target — fully legal under the live API — is
+        <b class="num" style="color:var(--red)">42.6% worse than doing nothing</b>: 9.102 vs 6.385 bps. Measured why:
+        cross-auction autocorrelation over 5,226,694 pairs is <b class="num">ρ&nbsp;=&nbsp;0.027</b>; carrying an
+        uncorrelated value at full weight adds ~√2× the target's own dispersion.</p>
+      <p>The MAE-optimal shrinkage fitted on train lands at <b class="num">0.0225 in every fold</b> — the model
+        learns to discard 97.75% of what it's given, for a gain of 0.0022 bps. The entire feature family died
+        for the price of one baseline.</p>
+    </div>
+    <div class="card kill rv d1">
+      <span class="stamp">Killed · Phase 2</span>
+      <h3>The revealed-target stream, entirely</h3>
+      <p>Phase 1 killed yesterday's target as a <i>level</i>; Phase 2 killed its <i>scale</i> too. Removing the
+        state family (<span class="num">stock_vol_20d</span>, <span class="num">revealed_abs</span>) leaves the model
+        <b class="num">exactly equal — −0.0002 bps</b> — despite 4.3% of gain importance. The vol state it carries is
+        already spanned by the live book. Killed for Phase&nbsp;3: any feature whose only input is revealed targets.</p>
+    </div>
+    <div class="card kill rv">
+      <span class="stamp">Killed</span>
+      <h3>Knowing the target's location</h3>
+      <p>The optimal constant under MAE is the training median (−0.06 bps). It beats zero by
+        <b class="num">0.00019&nbsp;bps</b> — the entire value of location information, and the proof predict-zero
+        was never a straw man.</p>
+    </div>
+    <div class="card rv d1">
+      <span class="stamp keep">Not dead — just not linear</span>
+      <h3>size_imbalance</h3>
+      <p>Sign-unstable and ≈0 under ridge; <b class="num" style="color:var(--amber)">24.2% of total gain</b> under
+        trees. The counterexample that keeps the kill list honest: a null result under one model class is a fact
+        about the <i>pair</i>, not the feature. Spread and near-missing stayed dead under both; this one didn't.</p>
+    </div>
+  </div>
+
+  <div class="band rv">
+    <p class="q">&ldquo;What none of this licenses: anything about the <span class="hl">leaderboard</span> — nothing was
+      scored through the competition API. Anything about <span class="hl">regimes</span> — the dates are anonymised.
+      Or that +2.02% is what LightGBM <span class="hl">can do</span> — the parameters are deliberately untuned.
+      A tuned number needs a nested split and its own log entry.&rdquo;</p>
+    <p class="who">RESEARCH.md — "what this phase does not license anyone to say", one per phase</p>
+  </div>
+</section>
+
+<!-- ================================ 07 GUARDS ================================ -->
+<section id="guards">
+  <p class="eyebrow rv"><span class="n">07</span>Engineering</p>
+  <h2 class="rv">Guards that <em>earned their keep</em> — and the two that caught me.</h2>
+  <p class="lede rv d1">Everything below exists because a silent failure mode was found, named, and fenced.
+    The last two are bugs in my own work that the discipline surfaced — they're in the log, not hidden from it.</p>
+
+  <div class="cards c3">
+    <div class="card rv">
+      <h3>The downcast is gated, not assumed</h3>
+      <p>float32 for the target is accepted only after measuring it: worst row error
+        <b class="num">1.47e−05 bps</b> (tol 1e−03), zero-MAE shift <b class="num">2.5e−10</b> (tol 1e−06).
+        If the gate fails, the target stays float64 and the manifest says so.</p>
+      <span class="file">scripts/build_fixture.py · manifest.json</span>
+    </div>
+    <div class="card rv d1">
+      <h3>The fillna(0) that would have been a catastrophe</h3>
+      <p><span class="num">far/near_price</span> are null on <b>55% of rows by construction</b> — no cross exists
+        before the five-minute mark. They live at ~1.0, so <span class="num">fillna(0)</span> silently invents a
+        <b class="num" style="color:var(--red)">−10,000 bps</b> deviation. Absence became an explicit indicator +
+        neutral value instead — and indicators are exempt from winsorisation.</p>
+      <span class="file">src/optiver/features.py · INDICATOR_NAMES</span>
+    </div>
+    <div class="card rv d2">
+      <h3>Provenance by manifest, not by trust</h3>
+      <p>The 130&nbsp;MB fixture is gitignored; what's committed is the manifest — row counts, dtypes, per-column
+        nulls, coverage, the gate numbers, and the parquet's <b>sha256</b>. A rebuild that doesn't reproduce the
+        hash is a rebuild that changed something.</p>
+      <span class="file">data/fixtures/manifest.json</span>
+    </div>
+    <div class="card rv">
+      <h3>Randomness forks by label</h3>
+      <p>All randomness flows through <span class="num">seeding.fork("label")</span> — streams fork by name, not
+        call order, so re-running one component can never perturb another's draws. A bare
+        <span class="num">np.random.*</span> is a defect.</p>
+      <span class="file">src/optiver/seeding.py</span>
+    </div>
+    <div class="card rv d1">
+      <h3>The smoke fixture that lied</h3>
+      <p>First built as every-8th-date — which contains no date <i>d−1</i> for any <i>d</i>, so the carry join
+        returned 100% nulls and three baselines <b>tied at exactly 6.20065</b> as though it were a measurement.
+        Rebuilt as 8 blocks of 8 consecutive dates; a warning now fires if carry coverage drops below 75%.
+        The failure was silent, plausible, and produced a number — which is exactly why it's in the log.</p>
+      <span class="file">RESEARCH.md · "build finding"</span>
+    </div>
+    <div class="card rv d2">
+      <h3>The coefficient that measured nothing</h3>
+      <p><span class="num">book_is_missing</span> read exactly 0.000 in all five folds — which looked like an honest
+        null. It wasn't: the outlier clip was flattening a 220-in-5.2M flag to a constant before the model saw it.
+        Found in review, fixed, every number regenerated (headline moved +0.00005), and a synthetic rare-indicator
+        test now guards the whole class.</p>
+      <span class="file">tests/test_features.py</span>
+    </div>
+  </div>
+</section>
+
+<!-- ================================ 08 REPRO ================================ -->
+<section id="repro">
+  <p class="eyebrow rv"><span class="n">08</span>Reproduce it</p>
+  <h2 class="rv">Every number has <em>a named command.</em></h2>
+  <p class="lede rv d1">Three scripts produce every figure on this page, each writing a committed, machine-readable
+    report. The tests are green on a fresh clone with no raw data — the committed smoke fixture is the same code
+    path with smaller numbers, never a toy branch.</p>
+
+  <pre class="rv d2"><span class="c"># fixture + manifest — ONE pass over train.csv, ever</span>
+python scripts/build_fixture.py
+
+<span class="c"># the floor, the scorecard, the coefficients   -> reports/phase1_baselines.json</span>
+python scripts/run_baselines.py
+
+<span class="c"># ablations, carry autocorrelation, index leg  -> reports/phase1_ablations.json</span>
+python scripts/run_ablations.py
+
+<span class="c"># the 2x2 + family ablations                   -> reports/phase2_lgbm.json</span>
+python scripts/run_phase2.py --preset FULL --ablate
+
+python -m pytest -q   <span class="g"># 98 passed</span> <span class="c">— seconds, on the committed smoke fixture</span></pre>
+
+  <div class="tbl-wrap rv">
+    <table>
+      <thead><tr><th>Kaggle's setup</th><th>Here</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr><td>score via the <span class="num">optiver2023</span> timeseries API</td><td>purged forward-chaining CV over train.csv</td><td>the API is a Linux-only .so; replaying its 3-date example measures nothing</td></tr>
+        <tr><td>one opaque leaderboard number</td><td><b>300 scored dates</b> with a stated embargo</td><td>a distribution you can slice beats a number you can't question</td></tr>
+        <tr><td>ensembles of LightGBM / NNs</td><td>ridge → one untuned LightGBM, measured in a 2×2</td><td>a strong model on an untrusted split teaches nothing</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+</div><!-- /wrap -->
+
+<footer>
+  <div class="wrap">
+    <p class="eyebrow rv">Numbers to have cold</p>
+    <p class="cold rv d1">
+      floor <b>6.3852</b> · ridge <b>+0.0628 / +0.98%</b> · lgbm_mem <b>+0.1293 / +2.02%</b> ·
+      carry_raw <b>−42.6%</b> · carry ρ <b>0.027</b> · shrinkage <b>0.0225</b> · median gain <b>0.0002</b> ·
+      fold spread <b>5.82–7.13</b> · index-leg σ <b>0.005 bps</b> · kurtosis <b>22.6</b> ·
+      s=0 edge <b>6.8%</b> · s=300 bump <b>3.9%</b> · float32 gate <b>1.47e−05 bps</b> ·
+      5.24M rows · 200 stocks · 481 dates · 55 buckets · 5 folds × 60 dates · embargo 5 · 98 tests
+    </p>
+    <p class="fin rv">optiver-close · Phase 1: the harness and the floor · Phase 2: gradient boosting on features with memory ·
+      next: MAE-native models under the same folds — the embargo is already paid for.</p>
+  </div>
+</footer>
+
+<script>
+(function () {
+  "use strict";
+  var RM = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  /* ---------- data (from committed reports) ---------- */
+  var S = [0,10,20,30,40,50,60,70,80,90,100,110,120,130,140,150,160,170,180,190,200,210,220,230,240,250,260,270,280,290,300,310,320,330,340,350,360,370,380,390,400,410,420,430,440,450,460,470,480,490,500,510,520,530,540];
+  var ZM = [7.9743,6.756,6.442,6.307,6.2186,6.2406,6.2645,6.0693,5.9598,5.952,5.9464,5.9667,6.1162,6.1798,6.2549,6.2531,6.2632,6.2378,6.1782,5.8824,5.9066,6.1284,7.3273,8.3801,9.2748,9.5239,9.668,9.6922,9.1158,8.5694,7.5429,6.3799,6.0611,5.9406,5.8855,5.8612,5.8472,5.5645,5.5278,5.5535,5.5181,5.5004,5.6023,5.2797,5.3099,5.2599,5.1064,5.0184,4.9652,4.8738,5.1654,5.561,5.8365,6.3143,6.6601];
+  var LM = [7.434,6.5315,6.2806,6.1691,6.0748,6.0987,6.1375,5.9574,5.8617,5.8473,5.8453,5.8551,6.0071,6.0677,6.1486,6.1425,6.1609,6.1322,6.0418,5.7664,5.8127,6.0265,7.2231,8.2738,9.1671,9.3971,9.5364,9.5586,8.8932,8.3742,7.2524,6.2844,5.9811,5.8654,5.7932,5.7829,5.7878,5.4761,5.453,5.4707,5.4322,5.3894,5.477,5.1677,5.1766,5.1345,4.9255,4.906,4.8684,4.8099,5.0852,5.5034,5.7725,6.2445,6.2134];
+  var IP = [6.775,3.322,2.505,2.187,2.312,2.274,2.029,1.843,1.647,1.76,1.701,1.871,1.784,1.813,1.7,1.769,1.634,1.694,2.208,1.973,1.591,1.664,1.421,1.268,1.161,1.332,1.362,1.379,2.442,2.279,3.852,1.497,1.32,1.267,1.568,1.337,1.017,1.588,1.352,1.491,1.556,2.018,2.235,2.121,2.511,2.384,3.542,2.24,1.949,1.31,1.554,1.036,1.096,1.105,6.707];
+  var FZ = [7.1304,6.0398,6.4742,6.4691,5.8153];       // per-fold predict-zero
+  var FL = [6.9612,5.9297,6.3470,6.3376,5.7067];       // per-fold lgbm_mem
+  var AMBER = "#C98500", AMBER_UI = "#E8A33D", BLUE = "#3987E5", GREY = "#8FA0AE",
+      RED = "#E66767", HAIR = "#263039", HAIR2 = "#31404C", MUT = "#63758B";
+  var svgNS = "http://www.w3.org/2000/svg";
+
+  function el(parent, tag, attrs, text) {
+    var e = document.createElementNS(svgNS, tag);
+    for (var k in attrs) e.setAttribute(k, attrs[k]);
+    if (text != null) e.textContent = text;
+    parent.appendChild(e);
+    return e;
+  }
+  function fmt(n, d) { return n.toLocaleString("en-US", { minimumFractionDigits: d || 0, maximumFractionDigits: d || 0 }); }
+
+  /* ---------- hero ticks ---------- */
+  var ticks = document.getElementById("ticks");
+  for (var i = 0; i < 55; i++) {
+    var t = document.createElement("div");
+    t.className = "tick" + (i === 0 || i === 30 || i === 54 ? " land" : "");
+    t.style.setProperty("--i", i);
+    ticks.appendChild(t);
+  }
+
+  /* ---------- progress bar ---------- */
+  var bar = document.getElementById("bar");
+  addEventListener("scroll", function () {
+    var h = document.documentElement;
+    var p = h.scrollTop / (h.scrollHeight - h.clientHeight);
+    bar.style.width = (p * 100).toFixed(2) + "%";
+  }, { passive: true });
+
+  /* ---------- reveal ---------- */
+  var toReveal = document.querySelectorAll(".rv");
+  if (RM || !("IntersectionObserver" in window)) {
+    toReveal.forEach(function (n) { n.classList.add("in"); });
+  } else {
+    var io = new IntersectionObserver(function (es) {
+      es.forEach(function (e) {
+        if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); }
+      });
+    }, { threshold: 0.08, rootMargin: "0px 0px -20px 0px" });
+    toReveal.forEach(function (n) { io.observe(n); });
+    // fallback: never let content stay hidden if IO callbacks are delayed
+    var pending = true, tmr = null;
+    function sweep() {
+      tmr = null;
+      var any = false;
+      toReveal.forEach(function (n) {
+        if (!n.classList.contains("in")) {
+          any = true;
+          if (n.getBoundingClientRect().top < innerHeight + 60) n.classList.add("in");
+        }
+      });
+      pending = any;
+    }
+    addEventListener("scroll", function () {
+      if (pending && !tmr) tmr = setTimeout(sweep, 250);
+    }, { passive: true });
+    addEventListener("load", sweep);
+  }
+
+  /* ---------- count-up ---------- */
+  document.querySelectorAll("[data-count]").forEach(function (n) {
+    var end = parseFloat(n.dataset.count), dec = +(n.dataset.dec || 0);
+    var pre = n.dataset.pre || "", suf = n.dataset.suf || "";
+    function set(v) { n.textContent = pre + fmt(v, dec) + suf; }
+    if (RM || !("IntersectionObserver" in window)) { set(end); return; }
+    var done = false;
+    var io2 = new IntersectionObserver(function (es) {
+      es.forEach(function (e) {
+        if (!e.isIntersecting || done) return;
+        done = true; io2.unobserve(n);
+        var t0 = performance.now(), dur = 1400;
+        (function step(now) {
+          var p = Math.min(1, (now - t0) / dur);
+          set(end * (1 - Math.pow(1 - p, 3)));
+          if (p < 1) requestAnimationFrame(step);
+        })(t0);
+      });
+    }, { threshold: 0.4 });
+    io2.observe(n);
+  });
+
+  /* ================= fold diagram ================= */
+  (function folds() {
+    var svg = document.getElementById("folds");
+    var X0 = 96, X1 = 934, Y0 = 34, RH = 24, GAP = 24;
+    function x(d) { return X0 + (d / 481) * (X1 - X0); }
+    var defs = el(svg, "defs", {});
+    var pat = el(defs, "pattern", { id: "hatch", width: 6, height: 6, patternUnits: "userSpaceOnUse", patternTransform: "rotate(45)" });
+    el(pat, "rect", { width: 6, height: 6, fill: "transparent" });
+    el(pat, "line", { x1: 0, y1: 0, x2: 0, y2: 6, stroke: MUT, "stroke-width": 2 });
+
+    [0, 60, 120, 180, 240, 300, 360, 420, 480].forEach(function (d) {
+      el(svg, "line", { x1: x(d), y1: Y0 - 8, x2: x(d), y2: Y0 + 5 * (RH + GAP) - GAP + 8, "class": "grid" });
+      el(svg, "text", { x: x(d), y: Y0 + 5 * (RH + GAP) - GAP + 26, "text-anchor": "middle", "class": "ax" }, d);
+    });
+    el(svg, "text", { x: (X0 + X1) / 2, y: Y0 + 5 * (RH + GAP) - GAP + 46, "text-anchor": "middle", "class": "ax" }, "date_id — the unit of assignment; a date takes all 200 stocks and all 55 buckets with it");
+
+    for (var f = 0; f < 5; f++) {
+      var y = Y0 + f * (RH + GAP);
+      var trainEnd = 176 + 60 * f, valStart = 181 + 60 * f, valEnd = valStart + 60;
+      var g = el(svg, "g", { "class": "foldrow", opacity: RM ? 1 : 0 });
+      g.style.transition = "opacity .6s ease " + (0.15 * f) + "s";
+      el(g, "text", { x: X0 - 14, y: y + RH / 2 + 4, "text-anchor": "end", "class": "lbl", fill: "#9DACB9" }, "fold " + f);
+      el(g, "rect", { x: x(0), y: y, width: x(trainEnd) - x(0), height: RH, rx: 3, fill: "#3987E549", stroke: BLUE, "stroke-width": 1 });
+      el(g, "rect", { x: x(trainEnd) + 2, y: y, width: Math.max(0, x(valStart) - x(trainEnd) - 4), height: RH, rx: 2, fill: "url(#hatch)" });
+      el(g, "rect", { x: x(valStart) + 2, y: y, width: x(valEnd) - x(valStart) - 2, height: RH, rx: 3, fill: AMBER });
+      el(g, "text", { x: (x(valStart) + x(valEnd)) / 2, y: y + RH / 2 + 4, "text-anchor": "middle", "font-size": "10.5", fill: "#0E1418", "font-weight": "600" }, valStart + "–" + (valEnd - 1));
+    }
+    var rows = svg.querySelectorAll(".foldrow");
+    if (!RM) {
+      var io3 = new IntersectionObserver(function (es) {
+        es.forEach(function (e) {
+          if (!e.isIntersecting) return;
+          rows.forEach(function (r) { r.setAttribute("opacity", 1); });
+          io3.disconnect();
+        });
+      }, { threshold: 0.3 });
+      io3.observe(svg);
+    }
+  })();
+
+  /* ================= dumbbell: per-fold floor vs model ================= */
+  (function dumbbell() {
+    var svg = document.getElementById("dumb");
+    var X0 = 90, X1 = 840, Y0 = 26, Y1 = 240, LO = 5.5, HI = 7.35;
+    function y(v) { return Y1 - (v - LO) / (HI - LO) * (Y1 - Y0); }
+    [5.5, 6, 6.5, 7].forEach(function (v) {
+      el(svg, "line", { x1: X0 - 10, y1: y(v), x2: X1, y2: y(v), "class": "grid" });
+      el(svg, "text", { x: X0 - 18, y: y(v) + 4, "text-anchor": "end", "class": "ax" }, v.toFixed(1));
+    });
+    el(svg, "text", { x: 20, y: 16, "class": "ax" }, "MAE, bps");
+    for (var f = 0; f < 5; f++) {
+      var cx = X0 + 60 + f * ((X1 - X0 - 120) / 4);
+      el(svg, "line", { x1: cx, y1: y(FZ[f]), x2: cx, y2: y(FL[f]), stroke: HAIR2, "stroke-width": 2 });
+      el(svg, "circle", { cx: cx, cy: y(FZ[f]), r: 7, fill: GREY });
+      el(svg, "circle", { cx: cx, cy: y(FL[f]), r: 7, fill: AMBER });
+      el(svg, "text", { x: cx + 14, y: y(FZ[f]) + 4, "class": "ann" }, FZ[f].toFixed(2));
+      el(svg, "text", { x: cx + 14, y: y(FL[f]) + 14, "class": "ann", fill: AMBER_UI }, FL[f].toFixed(2));
+      el(svg, "text", { x: cx, y: Y1 + 30, "text-anchor": "middle", "class": "ax" }, "fold " + f);
+    }
+    // spread bracket on the right
+    var bx = X1 + 40;
+    el(svg, "line", { x1: bx, y1: y(7.1304), x2: bx, y2: y(5.8153), stroke: MUT, "stroke-width": 1 });
+    el(svg, "line", { x1: bx - 5, y1: y(7.1304), x2: bx + 5, y2: y(7.1304), stroke: MUT, "stroke-width": 1 });
+    el(svg, "line", { x1: bx - 5, y1: y(5.8153), x2: bx + 5, y2: y(5.8153), stroke: MUT, "stroke-width": 1 });
+    var tb = el(svg, "text", { x: bx + 10, y: (y(7.1304) + y(5.8153)) / 2 - 4, "class": "ann" }, "spread");
+    el(svg, "text", { x: bx + 10, y: (y(7.1304) + y(5.8153)) / 2 + 12, "class": "ann", fill: "#E7EDF2" }, "1.31 bps");
+    void tb;
+  })();
+
+  /* ================= scoreboard ================= */
+  (function board() {
+    var rows = [
+      { m: "lgbm_mem",  s: "31 features + memory · Phase 2", v: 0.12926, p: "+2.02%", c: "amber" },
+      { m: "lgbm_row",  s: "same 14 features, better model", v: 0.10087, p: "+1.58%", c: "amber" },
+      { m: "ridge_mem", s: "memory features, linear model",  v: 0.07482, p: "+1.17%", c: "blue" },
+      { m: "ridge",     s: "14 row-wise features · Phase 1", v: 0.06283, p: "+0.98%", c: "blue" },
+      { m: "carry_shrunk", s: "yesterday × 0.0225",          v: 0.00218, p: "+0.03%", c: "ghost", dim: true },
+      { m: "constant_median", s: "the best constant",        v: 0.00019, p: "+0.003%", c: "ghost", dim: true },
+      { m: "zero",      s: "predict nothing, always",        v: 0,       p: "",       c: "ghost", dim: true }
+    ];
+    var MAX = 0.14, host = document.getElementById("board");
+    rows.forEach(function (r) {
+      var d = document.createElement("div");
+      d.className = "brow" + (r.dim ? " dim" : "");
+      var w = Math.max(0.3, r.v / MAX * 100);
+      var val = r.v === 0
+        ? "<b>6.38518</b> bps MAE · the floor"
+        : "<b>+" + r.v.toFixed(r.v >= 0.01 ? 4 : 5) + "</b> bps · " + r.p;
+      d.innerHTML =
+        '<div class="m">' + r.m + "<small>" + r.s + "</small></div>" +
+        '<div class="btrack"><div class="bfill growx ' + r.c + '" style="width:' + w + '%"></div></div>' +
+        '<div class="v">' + val + "</div>";
+      host.appendChild(d);
+    });
+    if (!RM) {
+      var io4 = new IntersectionObserver(function (es) {
+        es.forEach(function (e) {
+          if (!e.isIntersecting) return;
+          host.querySelectorAll(".growx").forEach(function (b, i) {
+            b.style.transitionDelay = (i * 0.08) + "s";
+            b.classList.add("in");
+          });
+          io4.disconnect();
+        });
+      }, { threshold: 0.3 });
+      io4.observe(host);
+    } else {
+      host.querySelectorAll(".growx").forEach(function (b) { b.classList.add("in"); });
+    }
+  })();
+
+  /* ================= the edge chart ================= */
+  (function edge() {
+    var svg = document.getElementById("edgechart");
+    var X0 = 74, X1 = 930;
+    var TY0 = 24, TY1 = 350, MLO = 4.4, MHI = 10.1;      // top panel: MAE
+    var BY0 = 400, BY1 = 556, PLO = 0, PHI = 7.4;        // bottom panel: improvement %
+    function x(s) { return X0 + (s / 540) * (X1 - X0); }
+    function ty(v) { return TY1 - (v - MLO) / (MHI - MLO) * (TY1 - TY0); }
+    function by(v) { return BY1 - (v - PLO) / (PHI - PLO) * (BY1 - BY0); }
+
+    // grids + axes
+    [5, 6, 7, 8, 9, 10].forEach(function (v) {
+      el(svg, "line", { x1: X0, y1: ty(v), x2: X1, y2: ty(v), "class": "grid" });
+      el(svg, "text", { x: X0 - 8, y: ty(v) + 4, "text-anchor": "end", "class": "ax" }, v);
+    });
+    [0, 2, 4, 6].forEach(function (v) {
+      el(svg, "line", { x1: X0, y1: by(v), x2: X1, y2: by(v), "class": "grid" });
+      el(svg, "text", { x: X0 - 8, y: by(v) + 4, "text-anchor": "end", "class": "ax" }, v + "%");
+    });
+    [0, 100, 200, 300, 400, 500, 540].forEach(function (s) {
+      el(svg, "text", { x: x(s), y: BY1 + 24, "text-anchor": "middle", "class": "ax" }, s === 540 ? "540s" : s);
+    });
+    el(svg, "text", { x: 16, y: 16, "class": "ax" }, "MAE, bps");
+    el(svg, "text", { x: 16, y: BY0 - 10, "class": "ax" }, "edge vs the floor, % — per 10-second bucket");
+
+    // landmark: s=300 line across both panels
+    el(svg, "line", { x1: x(300), y1: TY0, x2: x(300), y2: BY1, stroke: HAIR2, "stroke-width": 1, "stroke-dasharray": "3 4" });
+    el(svg, "text", { x: x(300) + 6, y: TY0 + 12, "class": "ann", fill: "#9DACB9" }, "s = 300 · indicative cross publishes");
+
+    // difficulty peak annotation at s=270
+    el(svg, "circle", { cx: x(270), cy: ty(9.6922), r: 4.5, fill: "none", stroke: GREY, "stroke-width": 1.5 });
+    el(svg, "text", { x: x(270) - 12, y: ty(9.6922) - 10, "text-anchor": "end", "class": "ann" }, "uncertainty peaks mid-auction · 9.69");
+
+    // series paths
+    function path(vals, yf) {
+      return vals.map(function (v, i) { return (i ? "L" : "M") + x(S[i]).toFixed(1) + " " + yf(v).toFixed(1); }).join(" ");
+    }
+    var pz = el(svg, "path", { d: path(ZM, ty), fill: "none", stroke: GREY, "stroke-width": 2, "stroke-dasharray": "6 5", "class": "series" });
+    var pl = el(svg, "path", { d: path(LM, ty), fill: "none", stroke: AMBER, "stroke-width": 2.4, "class": "series" });
+    // direct labels
+    el(svg, "text", { x: x(540) - 4, y: ty(6.66) - 14, "text-anchor": "end", "class": "lbl", fill: "#9DACB9" }, "predict-zero");
+    el(svg, "text", { x: x(390), y: ty(5.47) + 30, "text-anchor": "middle", "class": "lbl", fill: AMBER_UI }, "lgbm_mem");
+
+    // bottom bars
+    var bw = (X1 - X0) / 55 - 4;
+    var hot = { 0: "6.8%", 30: "3.9%", 54: "6.7%" };
+    S.forEach(function (s, i) {
+      var bx = x(s) - bw / 2, h = by(0) - by(IP[i]);
+      el(svg, "rect", { x: bx, y: by(IP[i]), width: bw, height: Math.max(1, h), rx: 2, fill: (i in hot) ? AMBER_UI : AMBER, opacity: (i in hot) ? 1 : 0.75 });
+      if (i in hot) el(svg, "text", { x: x(s), y: by(IP[i]) - 7, "text-anchor": "middle", "class": "ann", fill: AMBER_UI }, hot[i]);
+    });
+
+    // line-draw animation
+    if (!RM) {
+      [pz, pl].forEach(function (p) {
+        var L = p.getTotalLength();
+        p.style.strokeDasharray = p === pz ? "6 5" : L + " " + L;
+        if (p !== pz) { p.style.strokeDashoffset = L; }
+      });
+      var io5 = new IntersectionObserver(function (es) {
+        es.forEach(function (e) {
+          if (!e.isIntersecting) return;
+          pl.style.transition = "stroke-dashoffset 1.8s ease .15s";
+          pl.style.strokeDashoffset = 0;
+          io5.disconnect();
+        });
+      }, { threshold: 0.3 });
+      io5.observe(svg);
+    }
+
+    // hover layer
+    var wrap = document.getElementById("edgewrap"), tip = document.getElementById("edgetip");
+    var cross = el(svg, "line", { x1: 0, y1: TY0, x2: 0, y2: BY1, stroke: "#E7EDF2", "stroke-width": 1, opacity: 0 });
+    var dz = el(svg, "circle", { r: 5, fill: GREY, stroke: "#0E1418", "stroke-width": 2, opacity: 0 });
+    var dl = el(svg, "circle", { r: 5, fill: AMBER, stroke: "#0E1418", "stroke-width": 2, opacity: 0 });
+    var ov = el(svg, "rect", { x: X0, y: TY0, width: X1 - X0, height: BY1 - TY0, fill: "transparent" });
+    ov.style.cursor = "crosshair";
+
+    function show(evt) {
+      var r = svg.getBoundingClientRect();
+      var sx = (evt.clientX - r.left) / r.width * 960;
+      var i = Math.round((sx - X0) / (X1 - X0) * 54);
+      i = Math.max(0, Math.min(54, i));
+      var px = x(S[i]);
+      cross.setAttribute("x1", px); cross.setAttribute("x2", px); cross.setAttribute("opacity", 0.25);
+      dz.setAttribute("cx", px); dz.setAttribute("cy", ty(ZM[i])); dz.setAttribute("opacity", 1);
+      dl.setAttribute("cx", px); dl.setAttribute("cy", ty(LM[i])); dl.setAttribute("opacity", 1);
+      tip.style.display = "block";
+      tip.innerHTML = "<b>s = " + S[i] + "</b><br>" +
+        '<span class="tz">predict-zero&nbsp;&nbsp;' + ZM[i].toFixed(3) + "</span><br>" +
+        '<span class="tm">lgbm_mem&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;' + LM[i].toFixed(3) + "</span><br>" +
+        "edge <b>+" + (ZM[i] - LM[i]).toFixed(3) + "</b> bps · " + IP[i].toFixed(1) + "%";
+      var leftPct = px / 960 * 100;
+      tip.style.left = leftPct + "%";
+      tip.style.top = (ty(Math.min(ZM[i], LM[i])) / 600 * 100) + "%";
+      tip.style.transform = leftPct > 62 ? "translate(calc(-100% - 14px), -110%)" : "translate(14px, -110%)";
+    }
+    function hide() {
+      tip.style.display = "none";
+      cross.setAttribute("opacity", 0); dz.setAttribute("opacity", 0); dl.setAttribute("opacity", 0);
+    }
+    ov.addEventListener("mousemove", show);
+    ov.addEventListener("mouseleave", hide);
+    ov.addEventListener("touchstart", function (e) { if (e.touches[0]) show(e.touches[0]); }, { passive: true });
+    wrap.addEventListener("touchend", hide);
+  })();
+
+  /* ================= coefficients ================= */
+  (function coefs() {
+    var C = [
+      ["wap_minus_reference_bps", -2.558, true, false],
+      ["reference_minus_mid_bps", -1.683, true, false],
+      ["seconds_frac", -0.340, false, false],
+      ["near_minus_wap_bps", 0.239, false, false],
+      ["seconds_frac_sq", 0.222, false, false],
+      ["far_is_missing", -0.133, false, false],
+      ["far_minus_wap_bps", -0.127, false, false],
+      ["imbalance_ratio", 0.091, false, false],
+      ["imbalance_flag", -0.080, false, false],
+      ["matched_share", 0.072, false, false],
+      ["size_imbalance", -0.038, false, true],
+      ["near_is_missing", -0.023, false, true],
+      ["spread_bps", 0.022, false, true],
+      ["book_is_missing", 0.009, false, false]
+    ];
+    var host = document.getElementById("coefs"), MAX = 2.6;
+    C.forEach(function (c) {
+      var row = document.createElement("div");
+      row.className = "crow" + (c[2] ? " hot" : "") + (c[3] ? " flip" : "");
+      var w = Math.max(0.6, Math.abs(c[1]) / MAX * 50);
+      var pos = c[1] >= 0;
+      row.innerHTML =
+        '<div class="cn">' + c[0] + "</div>" +
+        '<div class="caxis"><div class="cbar" style="' + (pos ? "left:50%;" : "right:50%;") + "width:" + w + '%"></div></div>' +
+        '<div class="cv">' + (pos ? "+" : "−") + Math.abs(c[1]).toFixed(3) + "</div>";
+      host.appendChild(row);
+    });
+  })();
+
+  /* ================= the scale of mistakes ================= */
+  (function scale() {
+    var svg = document.getElementById("scale");
+    var X0 = 60, X1 = 920, Y = 84, H = 40;
+    var LO = -2.9, HI = 0.95;
+    function x(v) { return X0 + (v - LO) / (HI - LO) * (X1 - X0); }
+    el(svg, "line", { x1: x(0), y1: 30, x2: x(0), y2: Y + H + 34, stroke: HAIR2, "stroke-width": 1 });
+    el(svg, "text", { x: x(0), y: 22, "text-anchor": "middle", "class": "ax" }, "the floor (predict-zero)");
+    // wins
+    el(svg, "rect", { x: x(0), y: Y - 26, width: Math.max(2, x(0.1293) - x(0)), height: 18, rx: 3, fill: AMBER });
+    el(svg, "text", { x: x(0.1293) + 8, y: Y - 12, "class": "ann", fill: "#E8A33D" }, "lgbm_mem +0.129");
+    el(svg, "rect", { x: x(0), y: Y, width: Math.max(2, x(0.0628) - x(0)), height: 18, rx: 3, fill: BLUE });
+    el(svg, "text", { x: x(0.0628) + 8, y: Y + 14, "class": "ann", fill: "#6FA8E8" }, "ridge +0.063");
+    // the mistake
+    el(svg, "rect", { x: x(-2.717), y: Y + 26, width: x(0) - x(-2.717), height: 18, rx: 3, fill: RED, opacity: 0.85 });
+    el(svg, "text", { x: x(-2.717), y: Y + 62, "class": "ann", fill: RED }, "carry yesterday’s target: −2.717 bps · 42.6% worse than doing nothing");
+    el(svg, "text", { x: X0, y: Y + H + 52, "class": "ax" }, "improvement over the floor, bps — one shared linear scale");
+  })();
+})();
+</script>
+</body>
+</html>
