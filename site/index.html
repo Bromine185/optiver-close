@@ -78,6 +78,33 @@
   nav .brand em { color: var(--amber); font-style: normal; }
   nav a { color: var(--ink-2); }
   nav a:hover { color: var(--ink); text-decoration: none; }
+  nav .nav-next, nav .nav-prev { color: var(--amber); font-weight: 600; }
+
+  /* ============ phase transition ============ */
+  .phase-jump {
+    display: flex; flex-direction: column; align-items: center; text-align: center;
+    gap: 1.1rem; padding: clamp(3.2rem, 9vw, 5.5rem) 2rem;
+    border-radius: 16px; text-decoration: none; position: relative; overflow: hidden;
+    background: linear-gradient(165deg, var(--panel) 30%, #2A2312);
+    border: 1px solid #E8A33D66;
+    transition: border-color .35s ease, transform .35s ease, box-shadow .35s ease;
+  }
+  .phase-jump::before {
+    content: ""; position: absolute; inset: 0; pointer-events: none;
+    background: radial-gradient(60% 80% at 50% 110%, #E8A33D1f, transparent 70%);
+  }
+  .phase-jump:hover { border-color: var(--amber); transform: translateY(-4px); box-shadow: 0 24px 70px #E8A33D26; text-decoration: none; }
+  .pj-eyebrow { font-family: var(--mono); font-size: .74rem; letter-spacing: .22em; color: var(--amber); text-transform: uppercase; }
+  .pj-title { font-family: var(--serif); font-size: clamp(2.3rem, 6.5vw, 4.2rem); line-height: 1.08; color: var(--ink); text-wrap: balance; }
+  .pj-title em { color: var(--amber); }
+  .pj-arrow { display: inline-block; color: var(--amber); transition: transform .35s ease; }
+  .phase-jump:hover .pj-arrow { transform: translateX(12px); }
+  .pj-sub { font-size: 1rem; color: var(--ink-2); max-width: 52ch; }
+  .pj-sub b { color: var(--ink); }
+  @media (prefers-reduced-motion: reduce) {
+    .phase-jump, .pj-arrow { transition: none; }
+    .phase-jump:hover { transform: none; }
+  }
 
   /* ============ layout ============ */
   .wrap { max-width: 1060px; margin: 0 auto; padding: 0 clamp(1rem, 4vw, 2.5rem); }
@@ -202,7 +229,7 @@
     color: var(--ink-2); white-space: nowrap; box-shadow: 0 8px 24px #0009;
   }
   .tip b { color: var(--ink); font-weight: 600; }
-  .tip .tz { color: var(--ink-2); } .tip .tm { color: var(--amber); }
+  .tip .tz { color: var(--ink-2); } .tip .tm { color: #6FA8E8; }
 
   /* svg text */
   svg text { font-family: var(--mono); fill: var(--ink-2); }
@@ -220,7 +247,11 @@
 
   /* ============ scoreboard (HTML bars) ============ */
   .board { margin-top: 2rem; display: flex; flex-direction: column; gap: .55rem; }
-  .brow { display: grid; grid-template-columns: minmax(90px, 150px) 1fr minmax(150px, auto); gap: 1rem; align-items: center; }
+  .brow { display: grid; grid-template-columns: 150px 1fr 235px; gap: 1rem; align-items: center; }
+  @media (max-width: 680px) {
+    .brow, .wfrow { grid-template-columns: 90px 1fr !important; }
+    .brow .v, .wfrow .v { grid-column: 2; }
+  }
   .brow .m { font-family: var(--mono); font-size: .78rem; color: var(--ink); text-align: right; }
   .brow .m small { display: block; color: var(--muted); font-size: .64rem; }
   .btrack { position: relative; height: 26px; background: var(--panel-2); border-radius: 4px; overflow: hidden; }
@@ -318,13 +349,14 @@
   <a href="#kills">kills</a>
   <a href="#guards">guards</a>
   <a href="#repro">repro</a>
+  <a href="phase2.html" class="nav-next">phase 2 →</a>
 </nav>
 
 <div class="wrap">
 
 <!-- ================================ HERO ================================ -->
 <header class="hero">
-  <p class="hero-kicker rv">Kaggle · <b>Optiver — Trading at the Close</b> · Nasdaq closing auction</p>
+  <p class="hero-kicker rv">Kaggle · <b>Optiver — Trading at the Close</b> · Nasdaq closing auction · <b>Phase 1</b></p>
   <h1 class="rv d1">The last ten minutes.</h1>
   <p class="hero-sub rv d2">Predict the 60-second-ahead, <em>index-relative</em> move of a stock's weighted
     average price during the Nasdaq closing auction — in basis points, scored by mean absolute error,
@@ -337,8 +369,8 @@
     <div class="stat"><div class="v num" data-count="200">0</div><div class="k">stocks</div></div>
     <div class="stat"><div class="v num" data-count="481">0</div><div class="k">auction days</div></div>
     <div class="stat"><div class="v num" data-count="55">0</div><div class="k">buckets / auction</div></div>
-    <div class="stat"><div class="v num" data-count="98">0</div><div class="k">tests, all green</div></div>
-    <div class="stat hot"><div class="v num" data-count="2.02" data-dec="2" data-pre="+" data-suf="%">0</div><div class="k">edge over the floor</div></div>
+    <div class="stat"><div class="v num" data-count="78">0</div><div class="k">tests, all green</div></div>
+    <div class="stat hot"><div class="v num" data-count="0.98" data-dec="2" data-pre="+" data-suf="%">0</div><div class="k">edge over the floor</div></div>
   </div>
 
   <div class="strip rv" aria-hidden="true">
@@ -444,71 +476,61 @@
 
   <figure class="rv d2">
     <div class="fig-head">
-      <span class="fig-title">Per-fold MAE — the floor moves 10× more than any model does</span>
+      <span class="fig-title">Per-fold MAE — the floor moves 20× more than the model does</span>
       <span class="legend">
         <span class="li"><span class="sw box" style="background:#8FA0AE"></span>predict-zero</span>
-        <span class="li"><span class="sw box" style="background:var(--amber-mark)"></span>lgbm_mem (best model)</span>
+        <span class="li"><span class="sw box" style="background:var(--blue-mark)"></span>ridge</span>
       </span>
     </div>
-    <div class="chart"><svg id="dumb" viewBox="0 0 960 310" role="img" aria-label="Dumbbell chart: per fold, predict-zero MAE against the best model's MAE. The fold to fold spread is far larger than the model improvement."></svg></div>
+    <div class="chart"><svg id="dumb" viewBox="0 0 960 310" role="img" aria-label="Dumbbell chart: per fold, predict-zero MAE against the ridge model's MAE. The fold to fold spread is far larger than the model improvement."></svg></div>
     <figcaption>Fold-to-fold, predict-zero swings <b class="num">5.82&nbsp;→&nbsp;7.13&nbsp;bps</b> — a spread of
-      <b class="num">1.31&nbsp;bps</b>, roughly <b>10×</b> the best model effect (<span class="num">0.13&nbsp;bps</span>).
-      With <span class="num">date_id</span> anonymised, the cause is unknowable — which is why every comparison is
-      <b>paired within fold</b>, never pooled across them.</figcaption>
+      <b class="num">1.31&nbsp;bps</b>, more than <b>20×</b> any model effect measured in this phase
+      (<span class="num">0.063&nbsp;bps</span>). With <span class="num">date_id</span> anonymised, the cause is
+      unknowable — which is why every comparison is <b>paired within fold</b>, never pooled across them.</figcaption>
   </figure>
 </section>
 
 <!-- ================================ 04 LADDER ================================ -->
 <section id="ladder">
   <p class="eyebrow rv"><span class="n">04</span>Results</p>
-  <h2 class="rv">The ladder: every rung <em>earned separately.</em></h2>
-  <p class="lede rv d1">Phase&nbsp;1 proves linear signal exists under a split I trust. Phase&nbsp;2 changes exactly two
-    things — model class, then features with memory — and measures each one alone before measuring both.
-    Same folds, same embargo, same floor; the Phase&nbsp;2 report re-runs Phase&nbsp;1 inside itself as a replica check
-    and reproduces it to every printed digit.</p>
+  <h2 class="rv">The ladder: small, but <em>not noise.</em></h2>
+  <p class="lede rv d1">Phase&nbsp;1's only model is a deliberately boring ridge on 14 row-wise microstructure
+    features — because a strong model on an untrusted split teaches nothing. It beats the floor by
+    <strong>+0.0628&nbsp;bps, +0.98%</strong>. Small — but the evidence is consistency across three independent
+    slices, never the size of the pooled number.</p>
 
   <div class="board rv d2" id="board"></div>
 
   <div class="chips rv">
-    <span class="chip">lgbm_mem beats zero in <b>5 / 5 folds</b></span>
-    <span class="chip">on <b>100%</b> of 300 validation dates — worst date still <b>+0.037</b></span>
-    <span class="chip">at <b>all 55</b> buckets</span>
-    <span class="chip">on <b>96%</b> of 200 stocks</span>
-    <span class="chip">params fixed <b>a&nbsp;priori</b> — a measurement, not a search</span>
+    <span class="chip">ridge beats zero in <b>5 / 5 folds</b></span>
+    <span class="chip">on <b>97.7%</b> of 300 validation dates</span>
+    <span class="chip">on <b>80%</b> of 200 stocks</span>
+    <span class="chip">worst date <b>−0.013</b> · best <b>+0.223</b></span>
+    <span class="chip">alpha is a no-op until absurd — the fit is effectively OLS</span>
   </div>
-
-  <p class="subhead rv">The 2×2: why both changes were made separately</p>
-  <div class="grid22 rv d1">
-    <div class="h"></div><div class="h">14 row-wise features</div><div class="h">+ 17 memory features</div>
-    <div class="h">ridge</div>
-    <div class="cell"><div class="mv">6.3224</div><div class="dv">+0.0628 vs zero</div><div class="nm">ridge · Phase 1</div></div>
-    <div class="cell"><div class="mv">6.3104</div><div class="dv">+0.0748</div><div class="nm">ridge_mem</div></div>
-    <div class="h">lightgbm · L1</div>
-    <div class="cell"><div class="mv">6.2843</div><div class="dv">+0.1009</div><div class="nm">lgbm_row</div></div>
-    <div class="cell star"><div class="mv">6.2559</div><div class="dv">+0.1293 · +2.02%</div><div class="nm">lgbm_mem</div></div>
-  </div>
-  <p class="foot-note rv">Model class alone <span class="num">+0.038</span> · memory features alone <span class="num">+0.012</span> ·
-    both <span class="num">+0.066</span> — the <b>interaction term is +0.016, a quarter of the whole move</b>. The trees
-    extract more from the memory features than the sum of the parts predicts; that's what <span class="num">objective="l1"</span>
-    on nonlinear structure buys, and it's why a 2×2 beats one confounded jump.</p>
+  <p class="foot-note rv">Whether 0.98% is a lot or a little is deliberately unanswered here: nothing was scored
+    through the competition API, so there is no leaderboard number to sit it beside — and inventing one is exactly
+    the kind of claim the spec forbids. What Phase&nbsp;1 establishes is that <b>the signal exists and the number can
+    be trusted</b>. Whether a better model can grow it is <a href="phase2.html">Phase&nbsp;2's question</a>.</p>
 </section>
 
 <!-- ================================ 05 EDGE ================================ -->
 <section id="edge">
   <p class="eyebrow rv"><span class="n">05</span>Anatomy of the edge</p>
   <h2 class="rv">Where the signal lives —<br><em>and the landmark that proves it's real.</em></h2>
-  <p class="lede rv d1">The edge is largest at the auction open, holds through the middle, and spikes at exactly
-    <strong>s&nbsp;=&nbsp;300</strong> — the second the exchange first publishes the indicative crossing prices. A bump the
-    model has no way to fake is independent confirmation that <span class="num">near/far_price</span> carry real
-    information. Hover the chart.</p>
+  <p class="lede rv d1">The edge is <strong>5.4% at the open</strong> — seven times the average — and decays to
+    almost nothing by <span class="num">s&nbsp;≈&nbsp;490</span>. On the way down there is one clean secondary bump, at
+    exactly <strong>s&nbsp;=&nbsp;300</strong> — the second the exchange first publishes the indicative crossing prices.
+    A bump the model has no way to fake is independent confirmation that <span class="num">near/far_price</span>
+    carry real information. Hover the chart.</p>
 
   <figure class="rv d2">
     <div class="fig-head">
       <span class="fig-title">MAE across the auction, and the edge over the floor</span>
       <span class="legend">
         <span class="li"><span class="sw dash" style="border-color:#8FA0AE"></span>predict-zero (floor)</span>
-        <span class="li"><span class="sw" style="border-color:var(--amber-mark)"></span>lgbm_mem</span>
-        <span class="li"><span class="sw box" style="background:var(--amber-mark)"></span>edge, % of floor</span>
+        <span class="li"><span class="sw" style="border-color:var(--blue-mark)"></span>ridge</span>
+        <span class="li"><span class="sw box" style="background:var(--blue-mark)"></span>edge, % of floor</span>
       </span>
     </div>
     <div class="chart" id="edgewrap">
@@ -516,9 +538,10 @@
       <div class="tip" id="edgetip"></div>
     </div>
     <figcaption><b>Difficulty is not flat:</b> predict-zero's MAE peaks at <b class="num">9.69&nbsp;bps at s&nbsp;=&nbsp;270</b> —
-      uncertainty crests mid-auction, not at either end — then falls to 4.87 before the final climb into the bell.
-      At <b class="num">s&nbsp;=&nbsp;540</b> the floor jumps and the model recovers most of it (<b class="num">+6.7%</b>);
-      those last labels are the unverifiable ones, so this is noted, not interpreted.</figcaption>
+      uncertainty crests mid-auction, not at either end — then falls to 4.87 before a final climb into the bell.
+      The ridge recovers almost none of that last-bucket jump (<b class="num">+0.98%</b> at s&nbsp;=&nbsp;540). And this is
+      not a "the model only works at s&nbsp;=&nbsp;0" story: bucket&nbsp;0 contributes <b>12.6%</b> of the total edge — the
+      other 87% is spread across the auction.</figcaption>
   </figure>
 
   <p class="subhead rv">The economics: reversion toward the reference price</p>
@@ -532,21 +555,12 @@
     <p class="flip-note">▨ striped = sign flips across folds — reported as carrying nothing, which is cheaper than implying otherwise.</p>
   </figure>
 
-  <p class="subhead rv">Importance is not value — the family ablation</p>
-  <div class="tbl-wrap rv d1">
-    <table>
-      <thead><tr><th>Feature family removed</th><th class="num">Gain importance</th><th class="num">Actual cost of removal</th><th>Verdict</th></tr></thead>
-      <tbody>
-        <tr><td><b>rolling</b> (within-auction memory)</td><td class="num">14.6%</td><td class="num"><span class="inbar" style="width:74px"></span><b>+0.0184</b></td><td>the family the embargo was pre-paid for; positive in 5/5 folds</td></tr>
-        <tr><td><b>cross-sectional</b> (today's other 199 stocks)</td><td class="num">24.4%</td><td class="num"><span class="inbar" style="width:25px"></span><b>+0.0063</b></td><td>real but decaying fold-to-fold; recorded, not resolved</td></tr>
-        <tr><td><b>state</b> (revealed targets as vol/scale)</td><td class="num">4.3%</td><td class="num"><span class="inbar neg" style="width:2px"></span><b>−0.0002</b></td><td><span style="color:var(--red)">worthless</span> — importance measured where trees spent splits, not what they were worth</td></tr>
-      </tbody>
-    </table>
-  </div>
-  <p class="foot-note rv"><b class="num" style="color:var(--amber)">size_imbalance</b> is the flip side: a stable but
-    tiny −0.04 under ridge, then the <b>single largest feature at 24.2% of total gain</b> under LightGBM. Bounded in
-    [−1,&nbsp;1], no scale issues — the signal was always there, it just isn't linear. The cleanest demonstration of
-    what the model-class change bought.</p>
+  <p class="foot-note rv">Note what the winsorisation ablation showed about even this simple model: the feature
+    clip is worth <b>9.4% of the entire signal</b> — and not for the reason first written down. Clipping only the
+    fitted rows is <i>worse than not clipping at all</i>; what the clip actually stabilises is the
+    <b>standardisation</b> (unclipped, <span class="num">far_minus_wap_bps</span>'s training sd inflates 47–73×).
+    The earlier, wrong explanation is preserved in the log with a correction — because its number came from a
+    variant no committed code could regenerate, and that is the real lesson.</p>
 </section>
 
 <!-- ================================ 06 KILLS ================================ -->
@@ -559,8 +573,8 @@
   <figure class="rv d2">
     <div class="fig-head"><span class="fig-title">On one scale: what research earns vs what a leaky harness would hide</span></div>
     <div class="chart"><svg id="scale" viewBox="0 0 960 200" role="img" aria-label="Bar chart on a shared scale: ridge and the boosted model earn small positive slivers of basis points over zero, while carrying yesterday's target loses 2.7 basis points."></svg></div>
-    <figcaption>The edges honest research buys here are <b>slivers</b> — +0.06, +0.13 bps. The mistake a bad split
-      would have hidden is <b>the whole bar</b>. This is why the harness came before the model.</figcaption>
+    <figcaption>The edge honest research buys here is a <b>sliver</b> — +0.063 bps. The mistake a bad split would
+      have hidden is <b>the whole bar</b>. This is why the harness came before the model.</figcaption>
   </figure>
 
   <div class="cards c2" style="margin-top:2rem">
@@ -576,34 +590,36 @@
         for the price of one baseline.</p>
     </div>
     <div class="card kill rv d1">
-      <span class="stamp">Killed · Phase 2</span>
-      <h3>The revealed-target stream, entirely</h3>
-      <p>Phase 1 killed yesterday's target as a <i>level</i>; Phase 2 killed its <i>scale</i> too. Removing the
-        state family (<span class="num">stock_vol_20d</span>, <span class="num">revealed_abs</span>) leaves the model
-        <b class="num">exactly equal — −0.0002 bps</b> — despite 4.3% of gain importance. The vol state it carries is
-        already spanned by the live book. Killed for Phase&nbsp;3: any feature whose only input is revealed targets.</p>
-    </div>
-    <div class="card kill rv">
       <span class="stamp">Killed</span>
       <h3>Knowing the target's location</h3>
       <p>The optimal constant under MAE is the training median (−0.06 bps). It beats zero by
         <b class="num">0.00019&nbsp;bps</b> — the entire value of location information, and the proof predict-zero
         was never a straw man.</p>
     </div>
+    <div class="card kill rv">
+      <span class="stamp">Nothing linear</span>
+      <h3>spread_bps, size_imbalance, near_is_missing</h3>
+      <p>Three of fourteen features flip sign across folds and average ≈0. The bid-ask spread carries nothing
+        linear, and signed size imbalance — the first thing anyone reaches for in an auction dataset — is 1/28th
+        of the leading feature. Saying so is cheaper than leaving them in and implying they work.</p>
+      <p><b>Left open, deliberately:</b> a null under ridge is a fact about the <i>pair</i> (feature, model class),
+        not the feature. Whether any of these carries <i>nonlinear</i> signal is exactly the question
+        <a href="phase2.html">Phase&nbsp;2</a> was designed to answer.</p>
+    </div>
     <div class="card rv d1">
-      <span class="stamp keep">Not dead — just not linear</span>
-      <h3>size_imbalance</h3>
-      <p>Sign-unstable and ≈0 under ridge; <b class="num" style="color:var(--amber)">24.2% of total gain</b> under
-        trees. The counterexample that keeps the kill list honest: a null result under one model class is a fact
-        about the <i>pair</i>, not the feature. Spread and near-missing stayed dead under both; this one didn't.</p>
+      <span class="stamp keep">Deliberately not built</span>
+      <h3>A strong model</h3>
+      <p>No boosted trees, no ensembles, no neural nets in this phase — a good model on an untrusted split teaches
+        nothing. Phase&nbsp;1 spent its entire budget on the split, the floor, and provenance, so that whatever model
+        comes next inherits a number it can trust.</p>
     </div>
   </div>
 
   <div class="band rv">
     <p class="q">&ldquo;What none of this licenses: anything about the <span class="hl">leaderboard</span> — nothing was
       scored through the competition API. Anything about <span class="hl">regimes</span> — the dates are anonymised.
-      Or that +2.02% is what LightGBM <span class="hl">can do</span> — the parameters are deliberately untuned.
-      A tuned number needs a nested split and its own log entry.&rdquo;</p>
+      Or that 0.98% is a <span class="hl">good</span> result. It is a <span class="hl">measured</span> result on a
+      split whose guarantees are asserted. That is all it is — and it is the point of the phase.&rdquo;</p>
     <p class="who">RESEARCH.md — "what this phase does not license anyone to say", one per phase</p>
   </div>
 </section>
@@ -681,10 +697,7 @@ python scripts/run_baselines.py
 <span class="c"># ablations, carry autocorrelation, index leg  -> reports/phase1_ablations.json</span>
 python scripts/run_ablations.py
 
-<span class="c"># the 2x2 + family ablations                   -> reports/phase2_lgbm.json</span>
-python scripts/run_phase2.py --preset FULL --ablate
-
-python -m pytest -q   <span class="g"># 98 passed</span> <span class="c">— seconds, on the committed smoke fixture</span></pre>
+python -m pytest -q   <span class="g"># 78 passed</span> <span class="c">— seconds, on the committed smoke fixture</span></pre>
 
   <div class="tbl-wrap rv">
     <table>
@@ -692,10 +705,20 @@ python -m pytest -q   <span class="g"># 98 passed</span> <span class="c">— sec
       <tbody>
         <tr><td>score via the <span class="num">optiver2023</span> timeseries API</td><td>purged forward-chaining CV over train.csv</td><td>the API is a Linux-only .so; replaying its 3-date example measures nothing</td></tr>
         <tr><td>one opaque leaderboard number</td><td><b>300 scored dates</b> with a stated embargo</td><td>a distribution you can slice beats a number you can't question</td></tr>
-        <tr><td>ensembles of LightGBM / NNs</td><td>ridge → one untuned LightGBM, measured in a 2×2</td><td>a strong model on an untrusted split teaches nothing</td></tr>
+        <tr><td>ensembles of LightGBM / NNs</td><td>ridge on 14 row-wise features</td><td>a strong model on an untrusted split teaches nothing</td></tr>
       </tbody>
     </table>
   </div>
+</section>
+
+<!-- ================================ PHASE JUMP ================================ -->
+<section id="next">
+  <a class="phase-jump rv" href="phase2.html">
+    <span class="pj-eyebrow">The floor is trusted — now spend it</span>
+    <span class="pj-title">Enter <em>Phase&nbsp;2</em> <span class="pj-arrow">&rarr;</span></span>
+    <span class="pj-sub">Gradient boosting on features with memory. Same folds, same embargo, same floor —
+      the harness doesn't move, only the model does. <b>+0.98% is the number to beat.</b></span>
+  </a>
 </section>
 
 </div><!-- /wrap -->
@@ -704,14 +727,14 @@ python -m pytest -q   <span class="g"># 98 passed</span> <span class="c">— sec
   <div class="wrap">
     <p class="eyebrow rv">Numbers to have cold</p>
     <p class="cold rv d1">
-      floor <b>6.3852</b> · ridge <b>+0.0628 / +0.98%</b> · lgbm_mem <b>+0.1293 / +2.02%</b> ·
-      carry_raw <b>−42.6%</b> · carry ρ <b>0.027</b> · shrinkage <b>0.0225</b> · median gain <b>0.0002</b> ·
-      fold spread <b>5.82–7.13</b> · index-leg σ <b>0.005 bps</b> · kurtosis <b>22.6</b> ·
-      s=0 edge <b>6.8%</b> · s=300 bump <b>3.9%</b> · float32 gate <b>1.47e−05 bps</b> ·
-      5.24M rows · 200 stocks · 481 dates · 55 buckets · 5 folds × 60 dates · embargo 5 · 98 tests
+      floor <b>6.3852</b> · ridge <b>+0.0628 / +0.98%</b> · carry_raw <b>−42.6%</b> · carry ρ <b>0.027</b> ·
+      shrinkage <b>0.0225</b> · median gain <b>0.0002</b> · fold spread <b>5.82–7.13</b> ·
+      index-leg σ <b>0.005 bps</b> · kurtosis <b>22.6</b> · s=0 edge <b>5.4%</b> · s=300 bump <b>1.7%</b> ·
+      float32 gate <b>1.47e−05 bps</b> · 5.24M rows · 200 stocks · 481 dates · 55 buckets ·
+      5 folds × 60 dates · embargo 5 · 78 tests
     </p>
-    <p class="fin rv">optiver-close · Phase 1: the harness and the floor · Phase 2: gradient boosting on features with memory ·
-      next: MAE-native models under the same folds — the embargo is already paid for.</p>
+    <p class="fin rv">optiver-close · Phase 1: the harness and the floor ·
+      every number on this page is reproducible by a named command against the committed manifest.</p>
   </div>
 </footer>
 
@@ -723,10 +746,10 @@ python -m pytest -q   <span class="g"># 98 passed</span> <span class="c">— sec
   /* ---------- data (from committed reports) ---------- */
   var S = [0,10,20,30,40,50,60,70,80,90,100,110,120,130,140,150,160,170,180,190,200,210,220,230,240,250,260,270,280,290,300,310,320,330,340,350,360,370,380,390,400,410,420,430,440,450,460,470,480,490,500,510,520,530,540];
   var ZM = [7.9743,6.756,6.442,6.307,6.2186,6.2406,6.2645,6.0693,5.9598,5.952,5.9464,5.9667,6.1162,6.1798,6.2549,6.2531,6.2632,6.2378,6.1782,5.8824,5.9066,6.1284,7.3273,8.3801,9.2748,9.5239,9.668,9.6922,9.1158,8.5694,7.5429,6.3799,6.0611,5.9406,5.8855,5.8612,5.8472,5.5645,5.5278,5.5535,5.5181,5.5004,5.6023,5.2797,5.3099,5.2599,5.1064,5.0184,4.9652,4.8738,5.1654,5.561,5.8365,6.3143,6.6601];
-  var LM = [7.434,6.5315,6.2806,6.1691,6.0748,6.0987,6.1375,5.9574,5.8617,5.8473,5.8453,5.8551,6.0071,6.0677,6.1486,6.1425,6.1609,6.1322,6.0418,5.7664,5.8127,6.0265,7.2231,8.2738,9.1671,9.3971,9.5364,9.5586,8.8932,8.3742,7.2524,6.2844,5.9811,5.8654,5.7932,5.7829,5.7878,5.4761,5.453,5.4707,5.4322,5.3894,5.477,5.1677,5.1766,5.1345,4.9255,4.906,4.8684,4.8099,5.0852,5.5034,5.7725,6.2445,6.2134];
-  var IP = [6.775,3.322,2.505,2.187,2.312,2.274,2.029,1.843,1.647,1.76,1.701,1.871,1.784,1.813,1.7,1.769,1.634,1.694,2.208,1.973,1.591,1.664,1.421,1.268,1.161,1.332,1.362,1.379,2.442,2.279,3.852,1.497,1.32,1.267,1.568,1.337,1.017,1.588,1.352,1.491,1.556,2.018,2.235,2.121,2.511,2.384,3.542,2.24,1.949,1.31,1.554,1.036,1.096,1.105,6.707];
+  var LM = [7.5402,6.6044,6.3283,6.2131,6.1213,6.146,6.1846,6.0046,5.9031,5.8869,5.8824,5.9016,6.0572,6.1112,6.1868,6.18,6.204,6.1801,6.1265,5.8129,5.8445,6.0643,7.26,8.3183,9.222,9.4673,9.6101,9.6356,9.0189,8.4907,7.4157,6.3135,6.0093,5.8897,5.8209,5.8122,5.811,5.5063,5.4802,5.5059,5.49,5.4807,5.5814,5.255,5.2827,5.2451,5.0909,4.9999,4.9465,4.8643,5.147,5.5567,5.8182,6.3045,6.5949];
+  var IP = [5.443,2.243,1.765,1.488,1.565,1.515,1.276,1.067,0.952,1.095,1.076,1.092,0.965,1.11,1.089,1.169,0.946,0.927,0.837,1.181,1.053,1.046,0.919,0.737,0.569,0.595,0.598,0.584,1.064,0.918,1.687,1.041,0.855,0.858,1.097,0.836,0.619,1.045,0.861,0.856,0.51,0.357,0.372,0.466,0.513,0.281,0.305,0.368,0.377,0.194,0.356,0.078,0.314,0.155,0.978];
   var FZ = [7.1304,6.0398,6.4742,6.4691,5.8153];       // per-fold predict-zero
-  var FL = [6.9612,5.9297,6.3470,6.3376,5.7067];       // per-fold lgbm_mem
+  var FL = [7.0270,5.9842,6.4189,6.4139,5.7703];       // per-fold ridge
   var AMBER = "#C98500", AMBER_UI = "#E8A33D", BLUE = "#3987E5", GREY = "#8FA0AE",
       RED = "#E66767", HAIR = "#263039", HAIR2 = "#31404C", MUT = "#63758B";
   var svgNS = "http://www.w3.org/2000/svg";
@@ -863,9 +886,9 @@ python -m pytest -q   <span class="g"># 98 passed</span> <span class="c">— sec
       var cx = X0 + 60 + f * ((X1 - X0 - 120) / 4);
       el(svg, "line", { x1: cx, y1: y(FZ[f]), x2: cx, y2: y(FL[f]), stroke: HAIR2, "stroke-width": 2 });
       el(svg, "circle", { cx: cx, cy: y(FZ[f]), r: 7, fill: GREY });
-      el(svg, "circle", { cx: cx, cy: y(FL[f]), r: 7, fill: AMBER });
+      el(svg, "circle", { cx: cx, cy: y(FL[f]), r: 7, fill: BLUE });
       el(svg, "text", { x: cx + 14, y: y(FZ[f]) + 4, "class": "ann" }, FZ[f].toFixed(2));
-      el(svg, "text", { x: cx + 14, y: y(FL[f]) + 14, "class": "ann", fill: AMBER_UI }, FL[f].toFixed(2));
+      el(svg, "text", { x: cx + 14, y: y(FL[f]) + 14, "class": "ann", fill: "#6FA8E8" }, FL[f].toFixed(2));
       el(svg, "text", { x: cx, y: Y1 + 30, "text-anchor": "middle", "class": "ax" }, "fold " + f);
     }
     // spread bracket on the right
@@ -881,15 +904,13 @@ python -m pytest -q   <span class="g"># 98 passed</span> <span class="c">— sec
   /* ================= scoreboard ================= */
   (function board() {
     var rows = [
-      { m: "lgbm_mem",  s: "31 features + memory · Phase 2", v: 0.12926, p: "+2.02%", c: "amber" },
-      { m: "lgbm_row",  s: "same 14 features, better model", v: 0.10087, p: "+1.58%", c: "amber" },
-      { m: "ridge_mem", s: "memory features, linear model",  v: 0.07482, p: "+1.17%", c: "blue" },
-      { m: "ridge",     s: "14 row-wise features · Phase 1", v: 0.06283, p: "+0.98%", c: "blue" },
+      { m: "ridge",     s: "14 row-wise features + MAE rescale", v: 0.06283, p: "+0.98%", c: "blue" },
+      { m: "ridge_noscale", s: "same, without the rescale",  v: 0.06204, p: "+0.97%", c: "blue" },
       { m: "carry_shrunk", s: "yesterday × 0.0225",          v: 0.00218, p: "+0.03%", c: "ghost", dim: true },
       { m: "constant_median", s: "the best constant",        v: 0.00019, p: "+0.003%", c: "ghost", dim: true },
       { m: "zero",      s: "predict nothing, always",        v: 0,       p: "",       c: "ghost", dim: true }
     ];
-    var MAX = 0.14, host = document.getElementById("board");
+    var MAX = 0.07, host = document.getElementById("board");
     rows.forEach(function (r) {
       var d = document.createElement("div");
       d.className = "brow" + (r.dim ? " dim" : "");
@@ -925,7 +946,7 @@ python -m pytest -q   <span class="g"># 98 passed</span> <span class="c">— sec
     var svg = document.getElementById("edgechart");
     var X0 = 74, X1 = 930;
     var TY0 = 24, TY1 = 350, MLO = 4.4, MHI = 10.1;      // top panel: MAE
-    var BY0 = 400, BY1 = 556, PLO = 0, PHI = 7.4;        // bottom panel: improvement %
+    var BY0 = 400, BY1 = 556, PLO = 0, PHI = 6.2;        // bottom panel: improvement %
     function x(s) { return X0 + (s / 540) * (X1 - X0); }
     function ty(v) { return TY1 - (v - MLO) / (MHI - MLO) * (TY1 - TY0); }
     function by(v) { return BY1 - (v - PLO) / (PHI - PLO) * (BY1 - BY0); }
@@ -958,19 +979,20 @@ python -m pytest -q   <span class="g"># 98 passed</span> <span class="c">— sec
       return vals.map(function (v, i) { return (i ? "L" : "M") + x(S[i]).toFixed(1) + " " + yf(v).toFixed(1); }).join(" ");
     }
     var pz = el(svg, "path", { d: path(ZM, ty), fill: "none", stroke: GREY, "stroke-width": 2, "stroke-dasharray": "6 5", "class": "series" });
-    var pl = el(svg, "path", { d: path(LM, ty), fill: "none", stroke: AMBER, "stroke-width": 2.4, "class": "series" });
+    var pl = el(svg, "path", { d: path(LM, ty), fill: "none", stroke: BLUE, "stroke-width": 2.4, "class": "series" });
     // direct labels
     el(svg, "text", { x: x(540) - 4, y: ty(6.66) - 14, "text-anchor": "end", "class": "lbl", fill: "#9DACB9" }, "predict-zero");
-    el(svg, "text", { x: x(390), y: ty(5.47) + 30, "text-anchor": "middle", "class": "lbl", fill: AMBER_UI }, "lgbm_mem");
+    el(svg, "text", { x: x(390), y: ty(5.47) + 30, "text-anchor": "middle", "class": "lbl", fill: "#6FA8E8" }, "ridge");
 
     // bottom bars
     var bw = (X1 - X0) / 55 - 4;
-    var hot = { 0: "6.8%", 30: "3.9%", 54: "6.7%" };
+    var hot = { 0: "5.4%", 30: "1.7%" };
     S.forEach(function (s, i) {
       var bx = x(s) - bw / 2, h = by(0) - by(IP[i]);
-      el(svg, "rect", { x: bx, y: by(IP[i]), width: bw, height: Math.max(1, h), rx: 2, fill: (i in hot) ? AMBER_UI : AMBER, opacity: (i in hot) ? 1 : 0.75 });
-      if (i in hot) el(svg, "text", { x: x(s), y: by(IP[i]) - 7, "text-anchor": "middle", "class": "ann", fill: AMBER_UI }, hot[i]);
+      el(svg, "rect", { x: bx, y: by(IP[i]), width: bw, height: Math.max(1, h), rx: 2, fill: (i in hot) ? "#6FA8E8" : BLUE, opacity: (i in hot) ? 1 : 0.75 });
+      if (i in hot) el(svg, "text", { x: x(s), y: by(IP[i]) - 7, "text-anchor": "middle", "class": "ann", fill: "#6FA8E8" }, hot[i]);
     });
+    el(svg, "text", { x: X1 - 4, y: by(2.2) - 10, "text-anchor": "end", "class": "ann" }, "≈0.2% by s = 490 — the edge decays to nothing");
 
     // line-draw animation
     if (!RM) {
@@ -994,7 +1016,7 @@ python -m pytest -q   <span class="g"># 98 passed</span> <span class="c">— sec
     var wrap = document.getElementById("edgewrap"), tip = document.getElementById("edgetip");
     var cross = el(svg, "line", { x1: 0, y1: TY0, x2: 0, y2: BY1, stroke: "#E7EDF2", "stroke-width": 1, opacity: 0 });
     var dz = el(svg, "circle", { r: 5, fill: GREY, stroke: "#0E1418", "stroke-width": 2, opacity: 0 });
-    var dl = el(svg, "circle", { r: 5, fill: AMBER, stroke: "#0E1418", "stroke-width": 2, opacity: 0 });
+    var dl = el(svg, "circle", { r: 5, fill: BLUE, stroke: "#0E1418", "stroke-width": 2, opacity: 0 });
     var ov = el(svg, "rect", { x: X0, y: TY0, width: X1 - X0, height: BY1 - TY0, fill: "transparent" });
     ov.style.cursor = "crosshair";
 
@@ -1010,7 +1032,7 @@ python -m pytest -q   <span class="g"># 98 passed</span> <span class="c">— sec
       tip.style.display = "block";
       tip.innerHTML = "<b>s = " + S[i] + "</b><br>" +
         '<span class="tz">predict-zero&nbsp;&nbsp;' + ZM[i].toFixed(3) + "</span><br>" +
-        '<span class="tm">lgbm_mem&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;' + LM[i].toFixed(3) + "</span><br>" +
+        '<span class="tm">ridge&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;' + LM[i].toFixed(3) + "</span><br>" +
         "edge <b>+" + (ZM[i] - LM[i]).toFixed(3) + "</b> bps · " + IP[i].toFixed(1) + "%";
       var leftPct = px / 960 * 100;
       tip.style.left = leftPct + "%";
@@ -1068,10 +1090,10 @@ python -m pytest -q   <span class="g"># 98 passed</span> <span class="c">— sec
     el(svg, "line", { x1: x(0), y1: 30, x2: x(0), y2: Y + H + 34, stroke: HAIR2, "stroke-width": 1 });
     el(svg, "text", { x: x(0), y: 22, "text-anchor": "middle", "class": "ax" }, "the floor (predict-zero)");
     // wins
-    el(svg, "rect", { x: x(0), y: Y - 26, width: Math.max(2, x(0.1293) - x(0)), height: 18, rx: 3, fill: AMBER });
-    el(svg, "text", { x: x(0.1293) + 8, y: Y - 12, "class": "ann", fill: "#E8A33D" }, "lgbm_mem +0.129");
-    el(svg, "rect", { x: x(0), y: Y, width: Math.max(2, x(0.0628) - x(0)), height: 18, rx: 3, fill: BLUE });
-    el(svg, "text", { x: x(0.0628) + 8, y: Y + 14, "class": "ann", fill: "#6FA8E8" }, "ridge +0.063");
+    el(svg, "rect", { x: x(0), y: Y - 26, width: Math.max(2, x(0.0628) - x(0)), height: 18, rx: 3, fill: BLUE });
+    el(svg, "text", { x: x(0.0628) + 8, y: Y - 12, "class": "ann", fill: "#6FA8E8" }, "ridge +0.063");
+    el(svg, "rect", { x: x(0), y: Y, width: Math.max(2, x(0.0022) - x(0)), height: 18, rx: 3, fill: "#31404C" });
+    el(svg, "text", { x: x(0.0022) + 8, y: Y + 14, "class": "ann" }, "carry, optimally shrunk +0.002");
     // the mistake
     el(svg, "rect", { x: x(-2.717), y: Y + 26, width: x(0) - x(-2.717), height: 18, rx: 3, fill: RED, opacity: 0.85 });
     el(svg, "text", { x: x(-2.717), y: Y + 62, "class": "ann", fill: RED }, "carry yesterday’s target: −2.717 bps · 42.6% worse than doing nothing");
