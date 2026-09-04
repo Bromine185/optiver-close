@@ -714,7 +714,7 @@ beyond the levels listed.
 * Not that the forward weight matters: a thousandth of a basis point, in the
   right direction, five times.
 
-**Tests:**  in the main process (Phase 2's 98 + 4 blend + 5 benchmark
+**Tests:** 124 in the main process (Phase 2's 98 + 4 blend + 5 benchmark
 schema + 9 manifest-check + 7 notebook guards + 1 wrapper) and 8 neural tests in a child
 interpreter, all green on the committed smoke fixture: bit-identical refits on
 CPU, the inner holdout inside the training window with the exact embargo, an

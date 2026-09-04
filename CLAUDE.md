@@ -172,7 +172,7 @@ src/optiver/
   neural.py                 MLP + stock embedding, L1 loss, early-stopped INSIDE the training dates
   ensemble.py               convex blend of two OOF vectors, weight fitted on earlier folds only
 notebooks/                  Colab: colab_phase1 / colab_phase2 / colab_phase3 — where the FULL runs happen
-tests/                       tests here + 8 neural tests in a child interpreter (conftest.py says
+tests/                      124 tests here + 8 neural tests in a child interpreter (conftest.py says
                             why); seconds; green on a fresh clone via the smoke fixture
 reports/phase1_baselines.json   machine-readable copy of the log's numbers
 reports/phase1_ablations.json   the ablation table and the three analyses beside it
@@ -294,7 +294,7 @@ python scripts/run_phase3.py --device cuda        # FULL: on Colab, via notebook
 python scripts/compare_benchmarks.py       # -> reports/benchmark_comparison.md
 python scripts/run_baselines.py --preset SMOKE   # committed fixture only
 python scripts/check_manifest.py           # after a rebuild: did it reproduce the committed manifest?
-python -m pytest -q                        #  tests, + 8 neural tests in a child interpreter
+python -m pytest -q                        # 124 tests, + 8 neural tests in a child interpreter
 ```
 
 Timings are deliberately not quoted above. Each script records its own in the
