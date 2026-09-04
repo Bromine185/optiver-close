@@ -9,6 +9,7 @@ makes the third time a red suite instead of a refused rebuild on Colab.
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -39,7 +40,9 @@ def test_notebook_never_installs_torch(path: Path):
             continue
         src = "".join(c["source"])
         for line in src.splitlines():
-            if "pip" in line and "install" in line and "torch" in line and not line.lstrip().startswith("#"):
+            # an actual install invocation (`!pip install torch`, `["pip", "install", "torch..."]`),
+            # not prose that mentions one.
+            if re.search(r'(pip3?\s+install|"pip",\s*"install")[^#]*\btorch', line):
                 raise AssertionError(f"{path.name}: {line.strip()!r} would replace Colab's CUDA torch")
 
 
