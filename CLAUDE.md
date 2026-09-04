@@ -177,7 +177,7 @@ tests/                      117 tests here + 8 neural tests in a child interpret
 reports/phase1_baselines.json   machine-readable copy of the log's numbers
 reports/phase1_ablations.json   the ablation table and the three analyses beside it
 reports/phase2_lgbm.json        the 2x2 scorecard, importances, consistency slices
-reports/phase3_ensemble.json    Phase 3 scorecard, blend weights, early-stopping curves (written by the Colab run)
+reports/phase3_ensemble.json    Phase 3 scorecard, blend weights, early-stopping curves (the Colab A100 run)
 reports/benchmarks.json         every published number cited, with URL and provenance
 reports/benchmark_comparison.md rendered by compare_benchmarks.py; never edited by hand
 BENCHMARKS.md               why MAE does not compare across periods, and what does

@@ -1,6 +1,6 @@
 # Benchmark comparison
 
-Rendered by `python scripts/compare_benchmarks.py` from `reports/benchmarks.json` (retrieved 2026-09-04), `reports/phase2_lgbm.json`; `reports/phase3_ensemble.json` was not present.
+Rendered by `python scripts/compare_benchmarks.py` from `reports/benchmarks.json` (retrieved 2026-09-04), `reports/phase2_lgbm.json` and `reports/phase3_ensemble.json`.
 
 Improvement is over predict-zero **on the same rows**, and is the only column that
 compares across periods. Rows with no published zero baseline for their period get
@@ -9,7 +9,10 @@ this table does not license anyone to say, is in `BENCHMARKS.md`.
 
 | entry | period | MAE (bps) | zero MAE, same rows | improvement (bps) | improvement (%) | source |
 |---|---|---:|---:|---:|---:|---|
+| LightGBM + MLP, weight fitted forward | offline purged CV, dates 181..480 (this repo) | 6.2531 | 6.385 | 0.1320 | 2.07 | reports/phase3_ensemble.json (Phase 3, `blend_forward`) |
+| 0.5 LightGBM + 0.5 MLP (fixed) | offline purged CV, dates 181..480 (this repo) | 6.2544 | 6.385 | 0.1308 | 2.05 | reports/phase3_ensemble.json (Phase 3, `blend_fixed`) |
 | LightGBM, 31 features (+memory) | offline purged CV, dates 181..480 (this repo) | 6.2559 | 6.385 | 0.1293 | 2.02 | reports/phase2_lgbm.json (Phase 2, `lgbm_mem`) |
+| MLP + stock embedding, 31 features | offline purged CV, dates 181..480 (this repo) | 6.2715 | 6.385 | 0.1137 | 1.78 | reports/phase3_ensemble.json (Phase 3, `mlp_mem`) |
 | 1st place, mid-competition (2023-12): leaderboard leader | public leaderboard (hidden dates after train, scored to 2023-12-20) | 5.3070 | 5.400 | 0.0930 | 1.72 | https://medium.com/@joehbridges/gauging-the-market-optivers-trading-at-the-close-kaggle-competition-27b73f7789c0 (secondary) |
 | LightGBM, 14 row-wise features | offline purged CV, dates 181..480 (this repo) | 6.2843 | 6.385 | 0.1009 | 1.58 | reports/phase2_lgbm.json (Phase 2, `lgbm_row`) |
 | Open-source feature-engineering LightGBM (public notebooks, 2023-12) | public leaderboard (hidden dates after train, scored to 2023-12-20) | 5.3300 | 5.400 | 0.0700 | 1.30 | https://www.zhihu.com/en/article/678286556 (secondary) |

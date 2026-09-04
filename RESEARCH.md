@@ -567,109 +567,121 @@ targets moves later dates' state features and does not move date d's own.
 
 ## Phase 3 — A neural model beside the boosted one, and a blend that fits forward
 
-Two commands produce everything this section will quote:
+Two commands produce everything below. The first ran on Colab (an A100,
+`notebooks/colab_phase3.ipynb`); the report it wrote is committed beside this
+entry, and the second renders the benchmark table from it:
 
-    python scripts/run_phase3.py --preset FULL --device cuda   # -> reports/phase3_ensemble.json
+    python scripts/run_phase3.py --preset FULL --device cuda   # -> reports/phase3_ensemble.json  (400 s; lgbm arm 392 s, mlp arm 188 s, in parallel)
     python scripts/compare_benchmarks.py                       # -> reports/benchmark_comparison.md
 
-**The FULL run has not been executed yet.** It belongs to
-`notebooks/colab_phase3.ipynb` on an A100 — the two arms run as parallel
-processes and the network is the GPU's job — and this log quotes a Phase 3
-number only once `reports/phase3_ensemble.json` is committed beside it. SMOKE
-has run, on both CPU and MPS, and proves the code path in fourteen seconds;
-its numbers are not results (non-negotiable #6). What follows is the design,
-what it measures, and the null results named in advance so that none of them
-can be quietly dropped after the fact.
-
-### The arms, and what each isolates
-
 Same folds, same embargo, same floor, same scorecard code. Every arm sees the
-31-column Phase 2 matrix.
+31-column Phase 2 matrix. The headline arm, `blend_forward`, was named before
+the run.
 
-| arm | what it is | the question it answers |
-|---|---|---|
-| `zero` | the floor, recomputed | must agree with Phase 1 to the digit |
-| `lgbm_mem` | Phase 2's headline, rerun unchanged | must agree with `phase2_lgbm.json` to the digit — the replica check the script prints |
-| `mlp_mem` | an MLP with an 8-d stock embedding, L1 loss, early-stopped on an inner holdout | does a smooth function of the same columns, plus a per-stock vector the trees never see, extract anything on its own |
-| `blend_fixed` | 0.5 `lgbm_mem` + 0.5 `mlp_mem` | what two function classes are worth together, with nothing fitted |
-| `blend_forward` | per-fold weight on `lgbm_mem`, fitted on the OOF predictions of *earlier* folds only; fold 0 takes 0.5 | the headline, named before the run |
+**Replica check first, and it is not clean to the digit.** `zero` reproduces
+`phase2_lgbm.json` exactly (6.38518, |diff| 0). `lgbm_mem` reproduces it to
+**4.7e-4 bps** — 6.25639 on Colab against 6.25592 on the Mac. Same code, same
+seed, same pinned eight threads, same params; a different CPU and a different
+LightGBM build reduce histograms in a different order, and `deterministic=True`
+promises bit-identity on one machine, not across two. The gap is recorded
+rather than hidden because every Phase 3 comparison below is *paired within
+this run*: both LightGBM numbers in the tables are Colab's, and the blend's
+margin over the trees (0.0018–0.0054 bps per fold) is four to eleven times the
+cross-machine gap. A Phase 3 rerun on other hardware should agree with this
+entry to the third decimal, not the fifth.
 
-The comparison that matters is paired within fold: `blend_forward − lgbm_mem`
-on each of the five validation blocks. The bar is positive in 5 of 5. A blend
-that wins pooled and loses folds has measured the calendar, not the model —
-the fold-to-fold swing of the floor is 1.3 bps and every effect in this
-project is a hundredth of that.
+### The scorecard, and the paired comparison that matters
 
-### What the guards are, in one paragraph each
+Pooled OOF MAE over the same 3,293,068 scored rows, dates 181–480:
 
-**Early stopping inside the training dates.** The MLP's one data-driven choice
-is when to stop, and it is made on the last 10% of the *training* dates by
-position, embargoed from the inner training dates by the same five dates the
-outer folds use. The fold's validation dates are seen once, at prediction
-time. `tests/test_neural.py` asserts the inner block is inside the training
-window and the gap is exactly `embargo_dates`; a frame too small to hold an
-embargoed inner block raises rather than silently skipping the holdout.
+| arm | MAE (bps) | vs zero (bps) | vs zero (%) |
+|---|---|---|---|
+| `blend_forward` (headline) | **6.25313** | **+0.13205** | **+2.07%** |
+| `blend_fixed` (0.5 / 0.5) | 6.25441 | +0.13077 | +2.05% |
+| `lgbm_mem` (Phase 2, rerun) | 6.25639 | +0.12879 | +2.02% |
+| `mlp_mem` | 6.27146 | +0.11372 | +1.78% |
+| `zero` (floor) | 6.38518 | 0 | 0 |
 
-**The blend weight moves forward.** A weight fitted on the pooled
-out-of-fold vector and scored on the same vector is a one-parameter leak.
-Here fold *k*'s weight sees folds 0..*k*−1 only — dates that all precede its
-validation block — and `tests/test_ensemble.py` constructs the case where a
-peeking weight would choose differently and asserts the shipped one does not.
-Fold 0 has nothing earlier and takes 0.5; the fixed blend is reported beside
-the forward one as the arm that fits nothing, so the weight's value is itself
-a measured quantity.
+Paired within fold, bps, + = the first arm is better:
 
-**Two processes.** torch and LightGBM each load their own OpenMP runtime, and
-on this Mac one interpreter holding both segfaults (torch first: OMP Error
-#179, `pthread_mutex_init`) or deadlocks (a small LightGBM fit first, then
-torch) — measured across five orderings, not assumed, and not fixed by
-`KMP_DUPLICATE_LIB_OK`. So each arm runs `run_cv` in its own interpreter and
-the parent, which imports neither library, refuses to blend until both
-children report the same frame fingerprint, the same fold table and the same
-predict-zero vector. The test suite is split the same way: 108 tests in the
-main process, 8 neural tests in a child (`tests/conftest.py`).
+| fold | 0 | 1 | 2 | 3 | 4 |
+|---|---|---|---|---|---|
+| `blend_forward` − `lgbm_mem` | +0.0054 | +0.0025 | +0.0018 | +0.0040 | +0.0025 |
+| `blend_forward` − `blend_fixed` | 0 (same weight) | +0.0016 | +0.0020 | +0.0011 | +0.0017 |
+| `mlp_mem` − `lgbm_mem` | −0.0132 | −0.0171 | −0.0174 | −0.0129 | −0.0147 |
 
-**Hyperparameters fixed a priori**, for the MLP as for the LightGBM: the
-values in `neural.MLP_PARAMS` were written down before any fold was scored
-and are recorded verbatim in the report. A GPU number is reproducible to
-float noise, not to the bit; the report records its device.
+The blend beats the trees in **5 of 5 folds**. The bar set before the run was
+exactly that, and it is met — by a margin that is small in absolute terms
+(+0.0032 bps pooled, 2.5% of the trees' own edge over zero) and consistent in a
+way the fold-to-fold swing of the floor (7.13 → 5.82) makes hard to fake.
 
-### Null results named in advance
+**Consistency, `blend_forward` vs zero:** better on **100.0% of the 300
+validation dates** (worst +0.0279, best +0.3582); better at **all 55 buckets**
+(worst +0.0599 at a middle bucket, best +0.5374 at s = 0); better on **98.5% of
+the 200 stocks** (worst −0.1358, best +0.9706). Phase 2's `lgbm_mem` lost on
+4.0% of stocks; the blend loses on 1.5%.
 
-Three outcomes that would be worth writing down, listed now so that the
-section after the run has to address each:
+**Per bucket**, the landmarks are Phase 2's: 6.7% at s = 0, 4.0% at s = 300
+(the indicative-cross publication), 6.3% at s = 540 (the auction's last, and
+unverifiable, bucket), between 1% and 3.5% elsewhere.
 
-1. **`mlp_mem` alone does not beat `lgbm_mem`.** Likely, and not the
-   question. Phase 2's trees have the interaction with the memory features on
-   their side; the MLP's case is the blend.
-2. **The forward weight lands near 0.5 and `blend_fixed` scores as well or
-   better.** Then the weight bought nothing and the honest headline is the
-   fixed blend, with the forward arm recorded as the null.
-3. **The stock embedding adds nothing over the cross-sectional family.** Not
-   separable from this run — it needs a drop-the-embedding arm, which is
-   named here as the first Phase 4 ablation and is not run in Phase 3.
+### The weights, and where early stopping landed
+
+| fold | weight on `lgbm_mem` | fitted on | rows |
+|---|---|---|---|
+| 0 | 0.500 | nothing (the prior) | — |
+| 1 | 0.635 | fold 0's validation dates 181..240 | 656,150 |
+| 2 | 0.675 | dates 181..300 | 1,313,180 |
+| 3 | 0.700 | dates 181..360 | 1,973,124 |
+| 4 | 0.695 | dates 181..420 | 2,633,069 |
+
+The weight moves toward the trees as history accumulates and settles near 0.7:
+the MLP is worth about three-tenths of the blend, not half. That the forward
+weight beats the fixed 0.5 in every fold where it was fitted (+0.0011 to
++0.0020) says the weight carries real information; that the difference is a
+thousandth of a basis point says how little.
+
+Early stopping: best epoch 8 of 12, 9 of 13, 4 of 8, 9 of 13, 4 of 8 across
+the folds, on inner holdouts of 18, 24, 30, 36 and 42 training dates
+(dates 158–175, 212–235, 266–295, 320–355, 374–415 — all inside the training
+window, all five dates clear of it). The inner curves are nearly flat: from
+the first epoch to the best one the inner MAE moves by 0.02–0.03 bps, and by
+the tenth epoch the network has nothing left to learn from these columns.
+Twenty epochs was a ceiling that was never reached.
+
+### The null results, as named in advance
+
+1. **`mlp_mem` alone does not beat `lgbm_mem`** — confirmed, in 5 of 5 folds,
+   by 0.013–0.017 bps. The network on its own is a worse model of these 31
+   columns than the trees. That was the expected outcome and the blend was
+   always the question.
+2. **The forward weight lands near 0.5 and the fixed blend wins** — did not
+   happen. The weight settled at 0.64–0.70 and the forward blend beat the fixed
+   one in every fitted fold. The margin is small enough that a reader who
+   calls the two blends equivalent is not wrong; the direction is consistent
+   enough that the headline stays where it was named.
+3. **The stock embedding adds nothing over the cross-sectional family** —
+   still not separable from this run. Named as the first Phase 4 ablation.
 
 ### Beside the published results
 
-This part quotes numbers that already exist. `python scripts/compare_benchmarks.py`
-renders them from `reports/benchmarks.json` (every entry with URL, leaderboard
-and primary/secondary provenance) and the Phase 2 report; `BENCHMARKS.md`
-argues the comparison out.
-
-Raw MAE does not cross periods. Predict-zero scores 6.385 bps on this
-harness's 300 dates and about 5.40 on the public leaderboard's period — a
-gap eight times the largest model effect measured here — and the same
-trivial predictor swings 7.13 → 5.82 across this harness's own folds. The one
-statistic whose scale is the model's and not the calendar's is improvement
-over predict-zero on the same rows:
+`python scripts/compare_benchmarks.py` renders the comparison from
+`reports/benchmarks.json` (every entry with URL, leaderboard and
+primary/secondary provenance) and the two committed reports; `BENCHMARKS.md`
+argues it out. Raw MAE does not cross periods — predict-zero scores 6.385 bps
+here and about 5.40 on the public leaderboard's period, a gap eight times the
+largest model effect measured — so the one statistic whose scale is the
+model's and not the calendar's is improvement over predict-zero on the same
+rows:
 
 | entry | period | zero MAE | model MAE | improvement |
 |---|---|---:|---:|---:|
+| this harness, `blend_forward` | offline CV, dates 181..480 | 6.3852 | 6.2531 | **2.07 %** |
+| this harness, `lgbm_mem` | offline CV, dates 181..480 | 6.3852 | 6.2564 | 2.02 % |
+| this harness, `mlp_mem` | offline CV, dates 181..480 | 6.3852 | 6.2715 | 1.78 % |
 | leaderboard leader, Dec 2023 | public | 5.40 | 5.3070 | 1.72 % |
 | open-source feature-engineering LightGBM | public | 5.40 | 5.33 | 1.30 % |
 | single LightGBM, purged 5-fold ±2 dates (rank 186) | public | 5.40 | 5.3341 | 1.22 % |
-| this harness, `lgbm_mem` | offline CV, dates 181..480 | 6.3852 | 6.2559 | 2.02 % |
-| this harness, `lgbm_row` | offline CV, dates 181..480 | 6.3852 | 6.2843 | 1.58 % |
 | this harness, `ridge` | offline CV, dates 181..480 | 6.3852 | 6.3224 | 0.98 % |
 
 The public zero score is printed to two decimals in its source, so every
@@ -683,30 +695,33 @@ the period confusion the comparison exists to refuse.
 What that licenses: the improvement-over-zero of this harness's models,
 measured on 300 held-out dates behind an embargo, is of the same order as what
 the published solutions achieved on the public board — low single-digit
-percent — and the rank ordering of model classes here matches what the
-write-ups report about their own progressions. What it does not: a rank, a
-"beats", or anything at all about the private board beyond the levels listed.
-`BENCHMARKS.md` has the full list, in the same form as the sections above.
+percent — and the ordering of model classes here (ridge < trees < trees + a
+network) matches what the write-ups report about their own progressions. What
+it does not: a rank, a "beats", or anything at all about the private board
+beyond the levels listed.
 
 ### What Phase 3 does not license anyone to say
 
-* Nothing yet about `mlp_mem` or either blend — the FULL report is not
-  committed. When it is, this section gets its numbers and the same three
-  slices Phase 2 got (fold, date, bucket, stock), plus the per-fold weights
-  and where early stopping landed.
+* Not that the blend is +2.07% "better than Phase 2" across machines: the
+  comparison is paired inside one Colab run, and the cross-machine LightGBM
+  gap (4.7e-4 bps) is the resolution limit of any comparison that is not.
+* Not that a network "adds 0.05%" to trees in general: one architecture,
+  untuned by construction, on 31 columns it did not choose, blended with one
+  scalar. A tuned network would need a nested split and its own entry.
 * Still nothing about the leaderboard — nothing was scored through the
-  competition API, and the benchmark table above is explicit about which
-  column crosses periods.
-* Not that the MLP's number is what an MLP "can do" here: untuned by
-  construction, and 481 dates is one regime of one market.
+  competition API, and the benchmark table is explicit about which column
+  crosses periods.
+* Not that the forward weight matters: a thousandth of a basis point, in the
+  right direction, five times.
 
 **Tests:** 117 in the main process (Phase 2's 98 + 4 blend + 5 benchmark
 schema + 9 manifest-check + 1 wrapper) and 8 neural tests in a child
-interpreter, all green on the committed smoke fixture: bit-identical refits on CPU, the inner holdout
-inside the training window with the exact embargo, an excluded column that
-cannot move a prediction, a forward weight that cannot peek, and a benchmark
-file that cannot carry a number without a URL. The manifest check moved out of
-the notebooks and into `optiver.manifest` after the first Colab rebuild was
-refused for a 2e-15 disagreement in kurtosis — a text diff of the JSON, in a
-cell that a Colab auto-save had quietly reverted from the structural version
-committed in 323ac45. Nine tests now pin what it forgives and what it refuses.
+interpreter, all green on the committed smoke fixture: bit-identical refits on
+CPU, the inner holdout inside the training window with the exact embargo, an
+excluded column that cannot move a prediction, a forward weight that cannot
+peek, and a benchmark file that cannot carry a number without a URL. The
+manifest check moved out of the notebooks and into `optiver.manifest` after
+the first Colab rebuild was refused for a 2e-15 disagreement in kurtosis — a
+text diff of the JSON, in a cell that a Colab auto-save had quietly reverted
+from the structural version committed in 323ac45. Nine tests now pin what it
+forgives and what it refuses.

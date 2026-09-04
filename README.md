@@ -9,7 +9,8 @@ the one statistic that crosses periods.
 Phase 1 — fixture, purged forward-chaining CV, the predict-zero floor, ridge.
 Phase 2 — LightGBM on causal features with memory (+2.02% over the floor).
 Phase 3 — an MLP with a stock embedding beside it, blended with a weight
-fitted forward in time; the FULL run is `notebooks/colab_phase3.ipynb`.
+fitted forward in time (+2.07% over the floor, better than the trees alone in
+5 of 5 folds; run on Colab via `notebooks/colab_phase3.ipynb`).
 
 ```bash
 python -m pytest -q          # green on a fresh clone; no raw data needed
