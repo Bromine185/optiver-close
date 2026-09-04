@@ -157,10 +157,12 @@ scripts/run_ablations.py    ablations, carry autocorrelation, per-stock spread
 scripts/run_phase2.py       the 2x2 (ridge/lgbm x row/memory) + family ablations
 scripts/run_phase3.py       lgbm_mem + mlp_mem as two parallel processes, then the blends
 scripts/compare_benchmarks.py  this repo's rows beside the published results (BENCHMARKS.md)
+scripts/check_manifest.py   the reproduction report: rebuilt manifest vs git HEAD, structurally
 src/optiver/
   config.py                 SMOKE / FULL presets, auction geometry, paths
   seeding.py                label-forked seeded RNG (numpy; a torch generator, imported lazily)
   data.py                   fixture loader, revealed-target join, coverage
+  manifest.py               rebuilt-vs-committed manifest comparison (ints exact, floats to 1e-9)
   splits.py                 purged, embargoed, forward-chaining folds  <- load-bearing
   features.py               row-wise microstructure features (Phase 1)
   features2.py              CAUSAL features with memory: rolling / cross-sectional / state
@@ -170,7 +172,7 @@ src/optiver/
   neural.py                 MLP + stock embedding, L1 loss, early-stopped INSIDE the training dates
   ensemble.py               convex blend of two OOF vectors, weight fitted on earlier folds only
 notebooks/                  Colab: colab_phase1 / colab_phase2 / colab_phase3 — where the FULL runs happen
-tests/                      108 tests here + 8 neural tests in a child interpreter (conftest.py says
+tests/                      117 tests here + 8 neural tests in a child interpreter (conftest.py says
                             why); seconds; green on a fresh clone via the smoke fixture
 reports/phase1_baselines.json   machine-readable copy of the log's numbers
 reports/phase1_ablations.json   the ablation table and the three analyses beside it
@@ -291,7 +293,8 @@ python scripts/run_phase3.py --preset SMOKE       # proves the two-process path 
 python scripts/run_phase3.py --device cuda        # FULL: on Colab, via notebooks/colab_phase3.ipynb
 python scripts/compare_benchmarks.py       # -> reports/benchmark_comparison.md
 python scripts/run_baselines.py --preset SMOKE   # committed fixture only
-python -m pytest -q                        # 108 tests, + 8 neural tests in a child interpreter
+python scripts/check_manifest.py           # after a rebuild: did it reproduce the committed manifest?
+python -m pytest -q                        # 117 tests, + 8 neural tests in a child interpreter
 ```
 
 Timings are deliberately not quoted above. Each script records its own in the

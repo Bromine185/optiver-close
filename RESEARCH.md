@@ -700,9 +700,13 @@ write-ups report about their own progressions. What it does not: a rank, a
 * Not that the MLP's number is what an MLP "can do" here: untuned by
   construction, and 481 dates is one regime of one market.
 
-**Tests:** 108 in the main process (Phase 2's 98 + 4 blend + 5 benchmark
-schema + 1 wrapper) and 8 neural tests in a child interpreter, all green on
-the committed smoke fixture: bit-identical refits on CPU, the inner holdout
+**Tests:** 117 in the main process (Phase 2's 98 + 4 blend + 5 benchmark
+schema + 9 manifest-check + 1 wrapper) and 8 neural tests in a child
+interpreter, all green on the committed smoke fixture: bit-identical refits on CPU, the inner holdout
 inside the training window with the exact embargo, an excluded column that
 cannot move a prediction, a forward weight that cannot peek, and a benchmark
-file that cannot carry a number without a URL.
+file that cannot carry a number without a URL. The manifest check moved out of
+the notebooks and into `optiver.manifest` after the first Colab rebuild was
+refused for a 2e-15 disagreement in kurtosis — a text diff of the JSON, in a
+cell that a Colab auto-save had quietly reverted from the structural version
+committed in 323ac45. Nine tests now pin what it forgives and what it refuses.
