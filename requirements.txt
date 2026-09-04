@@ -1,11 +1,13 @@
-# Phase 1 needs no deep-learning stack. If a later phase adds one, port
-# seeding.torch_generator across from the sibling diff_model project rather than
-# reaching for torch.manual_seed at the call site.
+# Phases 1 and 2 need no deep-learning stack; torch arrived with Phase 3
+# (neural.py) and is imported lazily, so the earlier phases and their tests run
+# without it. Floor-pinned only: Colab ships a CUDA-matched torch build and a
+# ceiling here would make pip replace it with one that may not match the GPU.
 numpy>=2.0
 pandas>=2.2
 pyarrow>=17          # parquet
 scipy>=1.14
 scikit-learn>=1.5    # Ridge
-lightgbm>=4.0        # NOT used in Phase 1; reserved for Phase 2
+lightgbm>=4.0        # Phase 2
+torch>=2.2           # Phase 3; see the note above
 matplotlib>=3.9
 pytest>=8.0

@@ -8,7 +8,17 @@ machine that has never seen the raw Kaggle download.
 
 from __future__ import annotations
 
+import os
+
 import pytest
+
+# torch and LightGBM each carry their own OpenMP runtime, and on macOS one
+# process holding both segfaults or deadlocks depending on which initialised
+# first (scripts/run_phase3.py has the measurements). The neural tests therefore
+# run in a child interpreter that never loads lightgbm: test_neural.py is left
+# out of this collection and executed by test_neural_isolated.py, which sets
+# the variable below so the child collects it.
+collect_ignore = [] if os.environ.get("OPTIVER_NEURAL_INPROC") else ["test_neural.py"]
 
 from optiver import config as C
 from optiver import data as D

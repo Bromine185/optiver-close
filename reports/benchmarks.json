@@ -1,0 +1,133 @@
+{
+  "competition": "Optiver - Trading at the Close (Kaggle, 2023-09-20 to 2023-12-20; forecasting period to early 2024)",
+  "metric": "mean absolute error, basis points, unweighted over scored rows",
+  "retrieved": "2026-09-04",
+  "provenance": "Kaggle's leaderboard, discussion and write-up pages are client-rendered and could not be fetched without a session, so every number below is either a participant's own report (primary) or a third party's transcription of the Kaggle pages (secondary). Nothing here was scored by this repository.",
+  "zero_baseline": {
+    "public": {
+      "mae_bps": 5.40,
+      "source_url": "https://www.zhihu.com/en/article/678286556",
+      "source_type": "secondary",
+      "notes": "Quoted as 'if the public submission is all zeros, the score is 540' - two decimals, the article drops the point. Uncertainty +/-0.005 bps, i.e. +/-0.09 percentage points on every public-leaderboard improvement computed from it."
+    },
+    "private": null,
+    "cv": null
+  },
+  "entries": [
+    {
+      "name": "1st place (HYD): CatBoost 0.5 / GRU 0.3 / Transformer 0.2, online refit x5",
+      "mae_bps": 5.4030,
+      "leaderboard": "private",
+      "model_family": "gbdt+nn",
+      "source_url": "https://www.modb.pro/db/1774620580892971008",
+      "source_type": "secondary",
+      "retrieved": "2026-09-04",
+      "notes": "Chinese summary of the Kaggle write-ups; the write-up itself (kaggle.com/competitions/optiver-trading-at-the-close/writeups/hyd-1st-place-solution) did not render. Ensemble weights and the five refits at 12-day intervals are corroborated by https://www.docswell.com/s/8980249862/K6YQ3E-2024-05-23-200638. The same summary quotes a validation MAE of 5.8117 for this solution (with post-processing); its validation split is not described, so it is recorded as context and not as an entry."
+    },
+    {
+      "name": "1st place, mid-competition (2023-12): leaderboard leader",
+      "mae_bps": 5.3070,
+      "leaderboard": "public",
+      "model_family": "unknown",
+      "source_url": "https://medium.com/@joehbridges/gauging-the-market-optivers-trading-at-the-close-kaggle-competition-27b73f7789c0",
+      "source_type": "secondary",
+      "retrieved": "2026-09-04",
+      "notes": "'the current 1st place model has an MAE of 5.3070', written while the competition was live, so this is the public leaderboard before the forecasting period. The leader at that moment is not necessarily the team that finished first."
+    },
+    {
+      "name": "6th place: Transformer x3 + GRU, seq2seq, daily incremental refit",
+      "mae_bps": 5.4285,
+      "leaderboard": "private",
+      "model_family": "nn",
+      "source_url": "https://www.modb.pro/db/1774620580892971008",
+      "source_type": "secondary",
+      "retrieved": "2026-09-04",
+      "notes": "Same summary as the 1st-place entry."
+    },
+    {
+      "name": "14th place: LightGBM + CatBoost, 193 features, zero-sum post-processing (private)",
+      "mae_bps": 5.4458,
+      "leaderboard": "private",
+      "model_family": "gbdt",
+      "source_url": "https://www.zhihu.com/en/article/689096751",
+      "source_type": "secondary",
+      "retrieved": "2026-09-04",
+      "notes": "Study notes on the Kaggle write-up (kaggle.com/.../writeups/clash-royale-14th-place-solution-for-the-optiver-t). Two final submissions: 5.4457 and 5.4458 private; refit schedule X, X+9, X+18, X+27, X+54 days into the forecasting period."
+    },
+    {
+      "name": "14th place: LightGBM + CatBoost, 193 features, zero-sum post-processing (public)",
+      "mae_bps": 5.3327,
+      "leaderboard": "public",
+      "model_family": "gbdt",
+      "source_url": "https://www.zhihu.com/en/article/689096751",
+      "source_type": "secondary",
+      "retrieved": "2026-09-04",
+      "notes": "Same team, same submissions: 5.3384 and 5.3327 public. The public/private pair is the cleanest published evidence of the level shift between the two periods (+0.11 bps for an unchanged model)."
+    },
+    {
+      "name": "Open-source feature-engineering LightGBM (public notebooks, 2023-12)",
+      "mae_bps": 5.33,
+      "leaderboard": "public",
+      "model_family": "lightgbm",
+      "source_url": "https://www.zhihu.com/en/article/678286556",
+      "source_type": "secondary",
+      "retrieved": "2026-09-04",
+      "notes": "'Open-source feature engineering can achieve a score of 533' - two decimals. The same article puts the gold zone at that time at '532'."
+    },
+    {
+      "name": "Single LightGBM, 5-fold purged K-fold by date_id, +/-2-date embargo (fan2goa1, public rank 186)",
+      "mae_bps": 5.3341,
+      "leaderboard": "public",
+      "model_family": "lightgbm",
+      "source_url": "https://fan2goa1.github.io/mkdocs-material/blog/2023/12/24/kaggle-optiver---trading-at-the-close/",
+      "source_type": "primary",
+      "retrieved": "2026-09-04",
+      "notes": "Author's own report. Three submissions: 5.3366, 5.3341, 5.3389. The only published solution found whose validation design (dates indivisible, purge around the validation block) matches this repository's; no CV MAE is reported."
+    },
+    {
+      "name": "ConvNet on imbalance + raw features (nimashahbazi)",
+      "mae_bps": 5.3439,
+      "leaderboard": "public",
+      "model_family": "nn",
+      "source_url": "https://github.com/nimashahbazi/optiver-trading-close",
+      "source_type": "primary",
+      "retrieved": "2026-09-04",
+      "notes": "Author's README. A companion LSTM on raw features plus target lag scored 5.3508 public."
+    },
+    {
+      "name": "LightGBM + Transformer 8:2 (study-session presenter's own solution, rank not stated)",
+      "mae_bps": 5.482,
+      "leaderboard": "private",
+      "model_family": "gbdt+nn",
+      "source_url": "https://www.docswell.com/s/8980249862/K6YQ3E-2024-05-23-200638",
+      "source_type": "primary",
+      "retrieved": "2026-09-04",
+      "notes": "Slides from a Japanese study session on the competition. The presenter's components: LightGBM CV 5.858 / private 5.478, CatBoost CV 5.865 / private 5.483, Transformer CV 5.923 / private 5.613. The CV split is not described. Recorded chiefly because it is the one source that puts a CV number and a private number side by side for the same model: a 0.38 bps level gap for an unchanged LightGBM."
+    },
+    {
+      "name": "Forecasting-period leaderboard, first refresh (2024-01): gold zone",
+      "mae_bps": 5.461,
+      "leaderboard": "private",
+      "model_family": "unknown",
+      "source_url": "https://www.zhihu.com/en/article/678286556",
+      "source_type": "secondary",
+      "retrieved": "2026-09-04",
+      "notes": "'the gap between the gold zone and the open-source zone has increased from one thousandth (532 and 533) to three thousandths (461 and 464)', published 2024-01-22, a month into the forecasting period. A level of the running leaderboard on a PARTIAL period, not a final score of any team; three decimals as printed."
+    },
+    {
+      "name": "Forecasting-period leaderboard, first refresh (2024-01): open-source zone",
+      "mae_bps": 5.464,
+      "leaderboard": "private",
+      "model_family": "lightgbm",
+      "source_url": "https://www.zhihu.com/en/article/678286556",
+      "source_type": "secondary",
+      "retrieved": "2026-09-04",
+      "notes": "Same sentence as the gold-zone entry; same caveats."
+    }
+  ],
+  "not_sourced": [
+    "The all-zeros score on the private (forecasting-period) leaderboard. Without it no private-leaderboard improvement can be computed, and none is.",
+    "The final medal cutoffs and the number of teams.",
+    "Any top solution's CV MAE together with a description of its CV split; the two CV numbers found (5.8117 for 1st place, 5.858 for the study-session LightGBM) come without one and are recorded in notes only."
+  ]
+}

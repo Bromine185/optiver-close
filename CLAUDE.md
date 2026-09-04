@@ -118,8 +118,8 @@ Further limitations, in descending order of how much they constrain conclusions:
 | Kaggle | Here | Reason |
 |---|---|---|
 | Score by submitting through the `optiver2023` timeseries API | offline purged forward-chaining CV over `train.csv` | the API module is a Linux-only `.so`; and replaying the 3-date example set measures nothing |
-| Public/private LB over unseen future months | 5 folds × 60 held-out dates, covering dates 181–480 (62% of the timeline) | 300 scored dates with a stated embargo beats one opaque leaderboard number |
-| Ensembles of LightGBM / NN | ridge on 14 row-wise features | Phase 1 is the harness; a strong model on an untrusted split teaches nothing |
+| Public/private LB over unseen future months | 5 folds × 60 held-out dates, covering dates 181–480 (62% of the timeline) | 300 scored dates with a stated embargo beats one opaque leaderboard number; the published numbers sit beside these in `BENCHMARKS.md`, on the one statistic that crosses periods |
+| Ensembles of LightGBM / NN, refit daily through the forecasting period | Phase 1 ridge → Phase 2 LightGBM → Phase 3 LightGBM + MLP, blended with a weight fitted forward in time; nothing is ever refit on scored dates | each step is measured against the last on one harness; a strong model on an untrusted split teaches nothing, and the published solutions' online refits have no offline analogue |
 | `row_id` carried through the data | dropped, rebuilt on demand by `data.row_id()` | it is exactly `f"{date_id}_{seconds_in_bucket}_{stock_id}"` — 5.2 M copies of three columns we already have |
 
 ## Cross-validation, and what each guard prevents
@@ -155,9 +155,11 @@ scripts/build_fixture.py    ONE pass over train.csv -> fixtures + manifest
 scripts/run_baselines.py    coverage, target stats, purged CV, MAE tables
 scripts/run_ablations.py    ablations, carry autocorrelation, per-stock spread
 scripts/run_phase2.py       the 2x2 (ridge/lgbm x row/memory) + family ablations
+scripts/run_phase3.py       lgbm_mem + mlp_mem as two parallel processes, then the blends
+scripts/compare_benchmarks.py  this repo's rows beside the published results (BENCHMARKS.md)
 src/optiver/
   config.py                 SMOKE / FULL presets, auction geometry, paths
-  seeding.py                label-forked seeded RNG
+  seeding.py                label-forked seeded RNG (numpy; a torch generator, imported lazily)
   data.py                   fixture loader, revealed-target join, coverage
   splits.py                 purged, embargoed, forward-chaining folds  <- load-bearing
   features.py               row-wise microstructure features (Phase 1)
@@ -165,10 +167,18 @@ src/optiver/
   evaluate.py               MAE + per-fold / per-stock / per-bucket breakdowns
   baselines.py              zero, constant-median, carry, ridge; the CV runner
   boosted.py                LightGBM optimising MAE directly, params fixed a priori
-tests/                      98 tests, seconds; green on a fresh clone via the smoke fixture
+  neural.py                 MLP + stock embedding, L1 loss, early-stopped INSIDE the training dates
+  ensemble.py               convex blend of two OOF vectors, weight fitted on earlier folds only
+notebooks/                  Colab: colab_phase1 / colab_phase2 / colab_phase3 — where the FULL runs happen
+tests/                      108 tests here + 8 neural tests in a child interpreter (conftest.py says
+                            why); seconds; green on a fresh clone via the smoke fixture
 reports/phase1_baselines.json   machine-readable copy of the log's numbers
 reports/phase1_ablations.json   the ablation table and the three analyses beside it
 reports/phase2_lgbm.json        the 2x2 scorecard, importances, consistency slices
+reports/phase3_ensemble.json    Phase 3 scorecard, blend weights, early-stopping curves (written by the Colab run)
+reports/benchmarks.json         every published number cited, with URL and provenance
+reports/benchmark_comparison.md rendered by compare_benchmarks.py; never edited by hand
+BENCHMARKS.md               why MAE does not compare across periods, and what does
 ```
 
 ## Phase 2, and what its guards inherit
@@ -197,6 +207,59 @@ replica check. Its own rules:
   an indicator would duplicate it. State-family absence varies by stock history
   and keeps the indicator+neutral treatment.
 
+## Phase 3, and what its guards inherit
+
+Phase 3 keeps the harness byte-for-byte again — same folds, same embargo, same
+floor — and reruns `zero` and `lgbm_mem` inside its own report as the replica
+check against `phase2_lgbm.json`. It adds one model class and one blend:
+
+* **The MLP's hyperparameters were fixed a priori** (`neural.MLP_PARAMS`) and
+  were not moved after seeing a validation number, exactly as the LightGBM's
+  were. Its loss is L1 — the objective is the metric — with no target clip and
+  no rescale. Its inputs are the ridge's inputs: the same 31 columns, the same
+  train-only winsorisation and standardisation, the same skip lists.
+* **Early stopping never sees the fold's validation dates.** The one choice
+  the training data makes for itself is made on an inner holdout: the last
+  10% of the *training* dates by position, separated from the inner training
+  dates by the same embargo the outer folds use. `tests/test_neural.py`
+  asserts the inner block is inside the training window and the gap is
+  exactly `embargo_dates`. A model early-stopped on its own validation fold
+  would put a tuned number in the log wearing a measured number's clothes.
+* **The stock embedding is the one input the trees never see.** `stock_id`
+  is not a feature in Phase 1 or 2 and is not one here either; it enters as an
+  8-dimensional learned vector, so the network can learn a per-stock shaping
+  of the same features rather than a per-stock level.
+* **The blend weight moves forward in time.** For fold *k* it is fitted on
+  the out-of-fold predictions of folds 0..*k*−1 — dates that all precede
+  fold *k*'s validation block — and fold 0 takes the a priori weight 0.5. A
+  weight fitted on the pooled OOF vector and then scored on it is a one-
+  parameter leak, and a harness whose guarantees hold except for the small
+  leaks does not have guarantees. The fixed 50/50 blend is reported beside
+  it as the arm that fits nothing. `tests/test_ensemble.py` asserts that a
+  weight which *would* have peeked chooses differently from the one shipped.
+* **The headline arm was named before the run:** `blend_forward`. The
+  scorecard is sorted by MAE like every other, but the consistency slices and
+  the per-bucket table are computed for the arm the script names, not for
+  whichever row came out on top.
+* **Two processes, measured.** torch and LightGBM each carry their own OpenMP
+  runtime, and on macOS one interpreter holding both segfaults or deadlocks
+  depending on which initialised first (OMP Error #179; `KMP_DUPLICATE_LIB_OK`
+  does not help). So `run_phase3.py` runs each arm in its own interpreter —
+  concurrently, trees on the CPU and the network on the GPU — and the parent,
+  which imports neither library, checks that both children built the same
+  frame, the same folds and the same predict-zero vector before blending
+  anything. The test suite does the same: `tests/test_neural.py` runs in a
+  child interpreter via `tests/test_neural_isolated.py`.
+* **A GPU number is reproducible to float noise, not to the bit.** On CPU
+  two fits are bit-identical and the test asserts it; on CUDA and MPS
+  reductions are not order-stable. The report records its device and torch
+  version, and a FULL rerun is expected to agree with the log to the third
+  decimal, not the fifteenth.
+* **The FULL run happens on Colab** (`notebooks/colab_phase3.ipynb`, an A100),
+  because the arms are parallel and the network is the GPU's job. The report
+  it writes is downloaded and committed from the local machine together with
+  the log entry that quotes it; nothing pushes from Colab.
+
 ## Data policy
 
 `data/raw/` is gitignored: 641 MB of CSV plus a Linux-only `.so`, redownloadable
@@ -223,8 +286,12 @@ source /Users/raghavsharma/.venvs/optiver/bin/activate
 python scripts/build_fixture.py            # needs data/raw/train.csv
 python scripts/run_baselines.py            # FULL preset, 4.5 GB peak RSS
 python scripts/run_ablations.py            # FULL preset, the slowest of the three
+python scripts/run_phase2.py               # FULL preset, the 2x2
+python scripts/run_phase3.py --preset SMOKE       # proves the two-process path in seconds; never a result
+python scripts/run_phase3.py --device cuda        # FULL: on Colab, via notebooks/colab_phase3.ipynb
+python scripts/compare_benchmarks.py       # -> reports/benchmark_comparison.md
 python scripts/run_baselines.py --preset SMOKE   # committed fixture only
-python -m pytest -q                        # 78 tests
+python -m pytest -q                        # 108 tests, + 8 neural tests in a child interpreter
 ```
 
 Timings are deliberately not quoted above. Each script records its own in the

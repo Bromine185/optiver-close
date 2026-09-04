@@ -10,10 +10,10 @@ the way that matters.
     rng = fork("smoke-stocks")     # same stream every time, regardless of
     rng = fork("ridge-init")       # what else ran first
 
-The torch half of the sibling's version is deliberately absent: this project has
-no torch dependency (Phase 1 is ridge and arithmetic). If a later phase adds a
-neural model, port `torch_generator` across verbatim rather than reaching for
-`torch.manual_seed` at the call site.
+The torch half of the sibling's version arrived with Phase 3 (`neural.py`).
+`torch_generator` is ported verbatim except that torch is imported inside it,
+so Phase 1 and Phase 2 — and their tests — still import this module on a
+machine with no torch installed.
 """
 
 from __future__ import annotations
@@ -57,3 +57,17 @@ def seed_everything(label: str = "global", root: int = ROOT_SEED) -> int:
     random.seed(seed)
     np.random.seed(seed)
     return seed
+
+
+def torch_generator(label: str, root: int = ROOT_SEED):
+    """An independent torch Generator for this label (CPU; use for batch-order draws).
+
+    Same derivation as `fork`, so the label namespace is shared: "mlp-batches"
+    names one stream whether numpy or torch is asking for it. Imported lazily —
+    see the module docstring.
+    """
+    import torch
+
+    g = torch.Generator()
+    g.manual_seed(_label_seed(label, root) % (2**63 - 1))
+    return g
