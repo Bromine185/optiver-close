@@ -25,7 +25,7 @@ SMALL = dict(neural.MLP_PARAMS, hidden=(32, 16), max_epochs=3, batch_size=2048)
 
 def small_mlp(name: str = "mlp_mem", **over) -> neural.MlpMae:
     return neural.MlpMae(name=name, columns=tuple(F2.ALL_NAMES), extra_skip=SKIP2,
-                         params=dict(SMALL, **over), device="cpu")
+                         params=dict(SMALL, **over), device="cpu", verbose=False)
 
 
 @pytest.fixture(scope="module")
@@ -82,7 +82,8 @@ def test_column_subset_is_respected(df, X, halves):
     """Perturbing an EXCLUDED column must not move a single prediction."""
     tr, va = halves
     cols = tuple(c for c in F2.ALL_NAMES if c != "wap_ret_1b_bps")
-    m = neural.MlpMae(name="ablate", columns=cols, extra_skip=SKIP2, params=dict(SMALL), device="cpu")
+    m = neural.MlpMae(name="ablate", columns=cols, extra_skip=SKIP2, params=dict(SMALL), device="cpu",
+                      verbose=False)
     m.fit(tr, X.loc[tr.index], C.get_config("SMOKE"))
     Xva = X.loc[va.index]
     p1 = m.predict(va, Xva)

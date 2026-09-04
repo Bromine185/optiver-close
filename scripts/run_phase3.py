@@ -39,6 +39,7 @@ import json
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -128,26 +129,37 @@ def run_arm(arm: str, cfg: C.Config, device: str | None, out: Path) -> int:
     return 0
 
 
+def _relay(arm: str, pipe, t0: float) -> None:
+    """Forward a child's lines as they arrive, prefixed with the arm and elapsed seconds."""
+    for line in iter(pipe.readline, ""):
+        print(f"[{arm} {time.time() - t0:5.0f}s] {line.rstrip()}", flush=True)
+    pipe.close()
+
+
 def spawn_arms(cfg: C.Config, device: str | None, workdir: Path, serial: bool) -> dict[str, dict]:
-    """Run both arms as child interpreters; return each arm's meta + OOF arrays."""
-    procs: dict[str, tuple[subprocess.Popen, Path]] = {}
+    """Run both arms as child interpreters, streaming their output live; return meta + OOF arrays."""
+    t0 = time.time()
+    procs: dict[str, tuple[subprocess.Popen, threading.Thread]] = {}
     for arm in ARMS:
-        cmd = [sys.executable, str(Path(__file__).resolve()), "--preset", cfg.name,
+        # -u: unbuffered, so a child's progress lines reach the parent as they are printed.
+        cmd = [sys.executable, "-u", str(Path(__file__).resolve()), "--preset", cfg.name,
                "--arm", arm, "--arm-out", str(workdir / arm)]
         if arm == "mlp" and device:
             cmd += ["--device", device]
-        log = workdir / f"{arm}.log"
-        procs[arm] = (subprocess.Popen(cmd, stdout=log.open("w"), stderr=subprocess.STDOUT, cwd=REPO), log)
-        print(f"[{arm}] started pid {procs[arm][0].pid}", flush=True)
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, cwd=REPO,
+                                text=True, bufsize=1)
+        relay = threading.Thread(target=_relay, args=(arm, proc.stdout, t0), daemon=True)
+        relay.start()
+        procs[arm] = (proc, relay)
+        print(f"[{arm}] started pid {proc.pid}", flush=True)
         if serial:
-            procs[arm][0].wait()
+            proc.wait()
+            relay.join()
 
     out: dict[str, dict] = {}
-    for arm, (p, log) in procs.items():
-        rc = p.wait()
-        text = log.read_text()
-        print(f"\n----- [{arm}] child output -----")
-        print("\n".join(f"[{arm}] {line}" for line in text.rstrip().splitlines()))
+    for arm, (proc, relay) in procs.items():
+        rc = proc.wait()
+        relay.join()
         if rc != 0:
             raise RuntimeError(f"{arm} arm exited with {rc}; its output is above")
         meta = json.loads((workdir / f"{arm}.json").read_text())

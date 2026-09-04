@@ -43,6 +43,7 @@ number produced on a GPU is reproducible to float noise rather than to the bit.
 from __future__ import annotations
 
 import copy
+import time
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -123,6 +124,8 @@ class MlpMae:
     params: dict = field(default_factory=lambda: dict(MLP_PARAMS))
     #: None = `resolve_device()`. Tests pin "cpu" for bit-identity.
     device: str | None = None
+    #: One line per epoch on stdout: train MAE, inner-holdout MAE, seconds.
+    verbose: bool = True
 
     # fitted state
     bounds: dict = field(default_factory=dict, repr=False)
@@ -214,12 +217,19 @@ class MlpMae:
                 n_dense=Z.shape[1], n_stocks=N_STOCKS, embedding_dim=int(p["embedding_dim"]),
                 hidden=tuple(p["hidden"]), dropout=float(p["dropout"]),
             ).to(dev)
+            # fused=True on CUDA runs the Adam update as one kernel instead of one per
+            # parameter tensor — same arithmetic, fewer launches; the loop is launch-bound.
             opt = torch.optim.Adam(
-                model.parameters(), lr=float(p["learning_rate"]), weight_decay=float(p["weight_decay"])
+                model.parameters(), lr=float(p["learning_rate"]), weight_decay=float(p["weight_decay"]),
+                fused=(dev.type == "cuda"),
             )
 
             self.history, best_mae, best_state, bad = [], np.inf, None, 0
+            if self.verbose:
+                print(f"  [{self.name}] {len(tr_idx):,} inner-train rows, {len(va_idx):,} inner-holdout rows, "
+                      f"{len(tr_idx) // bs + 1} steps/epoch, device {self.fitted_device}", flush=True)
             for epoch in range(int(p["max_epochs"])):
+                t_epoch = time.time()
                 model.train()
                 perm = tr_t[torch.randperm(len(tr_t), generator=batches)].to(dev)
                 total = torch.zeros((), device=dev)
@@ -233,6 +243,10 @@ class MlpMae:
                 train_mae = float(total.item() / len(perm))
                 inner_mae = float(self._mae(model, Xt, St, yt, va_t))
                 self.history.append({"epoch": epoch, "train_mae": train_mae, "inner_val_mae": inner_mae})
+                if self.verbose:
+                    print(f"  [{self.name}] epoch {epoch + 1:>2}/{int(p['max_epochs'])}  train {train_mae:.4f}  "
+                          f"inner {inner_mae:.4f}{'  *' if inner_mae < best_mae else ''}  "
+                          f"({time.time() - t_epoch:.1f}s)", flush=True)
                 if inner_mae < best_mae:
                     best_mae, bad = inner_mae, 0
                     best_state = copy.deepcopy(model.state_dict())
@@ -240,6 +254,8 @@ class MlpMae:
                 else:
                     bad += 1
                     if bad >= int(p["patience"]):
+                        if self.verbose:
+                            print(f"  [{self.name}] early stop: best epoch {self.best_epoch + 1}", flush=True)
                         break
             model.load_state_dict(best_state)
 

@@ -39,6 +39,7 @@ the effect of each is visible rather than baked in.
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -286,8 +287,12 @@ def run_cv(
             print(f"{fold}  train {tr.sum():,} rows / val {va.sum():,} rows", flush=True)
 
         for m in models:
+            t_model = time.time()
             m.fit(df_tr, X_tr, cfg)
             p = m.predict(df_va, X_va)
+            if verbose:
+                print(f"  {m.name}: fit + predict {time.time() - t_model:.0f}s, "
+                      f"val MAE {mae(y_va, p):.4f}", flush=True)
             oof[m.name][np.flatnonzero(va)] = p
             per_fold.append({"fold": fold.index, "model": m.name, "mae_bps": mae(y_va, p),
                              "n": int(np.isfinite(y_va).sum())})
